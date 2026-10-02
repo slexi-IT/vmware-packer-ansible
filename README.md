@@ -12,7 +12,7 @@ network path from AWX into the build VM.
 | Phase | Tool | Rocky Linux | Windows Server |
 |---|---|---|---|
 | 1. Install | Packer `vsphere-iso`, communicator `none` | Kickstart from a CD labelled `OEMDRV`, `open-vm-tools` from the same CD, per-build root password, `poweroff` | `autounattend.xml`, per-build Administrator password; the first logon installs VMware Tools from the ESXi tools ISO and shuts down |
-| 2. Configure | Ansible through VMware Tools | Check the kickstart's completion marker, seal (machine-id, SSH host keys, network profile, logs), lock root, power off | Windows Update (with reboots), OpenSSH + access account, cleanup, seal (build address, setup answers, logs), shut down; **no sysprep** |
+| 2. Configure | Ansible through VMware Tools | Check the kickstart's completion marker, seal (machine-id, SSH host keys, network profile, logs), lock root, power off | Windows Update (with reboots), cleanup, seal (build address, setup answers, logs), shut down; **no sysprep** |
 | 3. Publish | `vmware.vmware` | Build VM → template `<image>-<version>`, build VM deleted, template tagged `testing` | same |
 
 The build VM is called `build-<image>-<version>` and lives in `vsphere_work_folder` until
@@ -56,7 +56,7 @@ get in customization's way. Without customization, a VM keeps the build's identi
 | Image | Source | Contents |
 |---|---|---|
 | `linux/rocky10-base` | Rocky Linux 10.2 minimal ISO | Offline install, UEFI, PVSCSI/VMXNET3, open-vm-tools, SELinux enforcing, no network configuration (no DHCP), access account `slexi` (SSH key) |
-| `windows/windows2025-std-desktop` | Windows Server 2025 evaluation ISO | Standard with Desktop Experience, UEFI/GPT, VMware Tools, all updates, OpenSSH with access account `slexi` (SSH key); **not sysprepped**, built-in Administrator with a random password |
+| `windows/windows2025-std-desktop` | Windows Server 2025 evaluation ISO | Standard with Desktop Experience, UEFI/GPT, VMware Tools, all updates; no extra accounts and no SSH; **not sysprepped**, built-in Administrator with a random password (customization sets the real one) |
 
 Adding an image: a new folder under `images/<os>/` with `image.yml`, a Packer template,
 install answers and `configure.yml` (built from the shared steps in `playbooks/tasks/<os>/`),

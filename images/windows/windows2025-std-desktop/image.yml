@@ -28,11 +28,6 @@ image_build_network:
   gateway: 192.0.2.1
   dns: [1.1.1.1]
 
-# Access account baked into the image: local administrator, random unknown password,
-# SSH key login through the built-in OpenSSH server
-image_admin_user: slexi
-image_admin_ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJTpbiuPOb459X11qmf9RnVqE1RhKv1XeMRDeHIdZqr3"
-
 # --- how build-image.yml drives this image -------------------------------------------------
 # Rendered into the build's work directory (Jinja2, with all variables above)
 image_templates:

@@ -7,9 +7,6 @@
 - name: Windows Update
   ansible.builtin.include_tasks: "{{ tasks_dir }}/windows/updates.yml"
 
-- name: Access account and OpenSSH
-  ansible.builtin.include_tasks: "{{ tasks_dir }}/windows/access.yml"
-
 # Image-specific steps go here (roles, features, hardening, ...)
 
 - name: Shrink the image

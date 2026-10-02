@@ -31,6 +31,22 @@ python3 -m venv .venv && .venv/bin/pip install ansible-builder   # once
 Use a new tag for every build, so a running AWX never picks up a changed image under an old
 tag.
 
+## Build inside the cluster (single node, no registry)
+
+```sh
+kubectl apply -k ee/
+kubectl -n ee-build logs -f job/build-ee --all-containers
+```
+
+`kustomization.yaml` puts the three EE files into a ConfigMap and sets the image name (`IMAGE`).
+The Job runs `ansible-builder create`, then BuildKit with its containerd worker: it builds through
+the node's containerd (`/run/k0s/containerd.sock`) into the namespace `k8s.io`, where kubelet finds
+it. The build pod is privileged with the node's containerd socket and directories, so it is
+effectively root on the node, and the image exists only on the node that ran the Job.
+
+For a new version: change `IMAGE` in `kustomization.yaml` (and the image in `awx/config.yml`),
+`kubectl -n ee-build delete job build-ee`, apply again.
+
 ## Load into the cluster
 
 In the lab there is no registry: the image goes into k0s's containerd as a file.

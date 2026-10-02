@@ -18,6 +18,18 @@ network path from AWX into the build VM.
 The build VM is called `build-<image>-<version>` and lives in `vsphere_work_folder` until
 phase 3. If phase 2 fails it is left there for inspection.
 
+## Network: no DHCP
+
+The build network has no DHCP. Each image's `image.yml` sets the build VM's fixed address in
+`image_build_network` (address, prefix, gateway, DNS): the Rocky kickstart uses it during the
+install, Windows gets it as the first Ansible step (Windows Update needs it). Sealing removes it
+again, so **templates carry no address**: Rocky has no network profile and NetworkManager's
+automatic DHCP profiles are off; Windows' adapter is reset before sysprep. VMs made from a
+template get their address from VMware guest customization when they are deployed.
+
+The boot test therefore checks what VMware Tools report (Tools running, OS, hostname), not an
+address.
+
 ## Repository layout
 
 | Path | Contents |
@@ -35,7 +47,7 @@ phase 3. If phase 2 fails it is left there for inspection.
 
 | Image | Source | Contents |
 |---|---|---|
-| `linux/rocky10-base` | Rocky Linux 10.2 minimal ISO | Offline install, UEFI, PVSCSI/VMXNET3, open-vm-tools, SELinux enforcing, DHCP with DNS 1.1.1.1, access account `slexi` (SSH key) |
+| `linux/rocky10-base` | Rocky Linux 10.2 minimal ISO | Offline install, UEFI, PVSCSI/VMXNET3, open-vm-tools, SELinux enforcing, no network configuration (no DHCP), access account `slexi` (SSH key) |
 | `windows/windows2025-std-desktop` | Windows Server 2025 evaluation ISO | Standard with Desktop Experience, UEFI/GPT, VMware Tools, all updates, OpenSSH with access account `slexi` (SSH key), sysprepped; the built-in Administrator is disabled |
 
 Adding an image: a new folder under `images/<os>/` with `image.yml`, a Packer template,

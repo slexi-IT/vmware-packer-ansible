@@ -7,7 +7,10 @@ cdrom
 lang en_US.UTF-8
 keyboard us
 timezone {{ image_timezone }} --utc
-network --bootproto=dhcp --device=link --activate --hostname=localhost.localdomain
+# Fixed build address from image.yml (no DHCP on the build network); removed again when sealing
+{% set n = image_build_network %}
+{% set bits = '1' * (n.prefix | int) ~ '0' * (32 - (n.prefix | int)) %}
+network --bootproto=static --ip={{ n.ip }} --netmask={{ [bits[0:8], bits[8:16], bits[16:24], bits[24:32]] | map('int', base=2) | join('.') }} --gateway={{ n.gateway }} --nameserver={{ n.dns | join(',') }} --device=link --activate --hostname=localhost.localdomain
 
 # Per-build root password, only for Ansible's login through VMware Tools (guest operations).
 # The seal step locks root again and deletes the kickstart copies Anaconda keeps in /root.

@@ -1,6 +1,9 @@
 ---
 # Steps for windows2025-std-desktop, run by playbooks/build-image.yml inside the build VM through
 # VMware Tools. The shared Windows steps live in playbooks/tasks/windows/.
+- name: Fixed build address (no DHCP on the build network)
+  ansible.builtin.include_tasks: "{{ tasks_dir }}/windows/network.yml"
+
 - name: Windows Update
   ansible.builtin.include_tasks: "{{ tasks_dir }}/windows/updates.yml"
 

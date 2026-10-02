@@ -1,7 +1,7 @@
 ---
 # Runs in the build VM (vmware_tools connection), last: remove everything that must be unique per
-# machine and the build's own access, then power off. Vars: image_dns (list)
-- name: Empty machine-id (first boot generates a new one; NetworkManager's DHCP client ID depends on it)
+# machine and the build's own access, then power off.
+- name: Empty machine-id (first boot generates a new one, so clones never share it)
   ansible.builtin.copy:
     content: ""
     dest: /etc/machine-id
@@ -16,29 +16,22 @@
   ansible.builtin.shell: rm -f /etc/ssh/ssh_host_*
   changed_when: true
 
-- name: Remove the installer's network profiles
+# The build's fixed address goes; VMs made from the template get theirs from VMware guest
+# customization when they are deployed
+- name: Remove the build's network profile
   ansible.builtin.shell: rm -f /etc/NetworkManager/system-connections/*.nmconnection
   changed_when: true
 
-# No interface-name, so it applies to whichever NIC a VM gets; no uuid, so NetworkManager
-# derives one from the file name
-- name: Generic DHCP profile with the image's DNS servers
+# Without a profile NetworkManager would create "Wired connection 1" with DHCP on its own;
+# there is no DHCP on these networks
+- name: No automatic DHCP profiles
   ansible.builtin.copy:
-    dest: /etc/NetworkManager/system-connections/default.nmconnection
-    mode: "0600"
+    dest: /etc/NetworkManager/conf.d/90-no-auto-default.conf
+    mode: "0644"
     content: |
-      [connection]
-      id=default
-      type=ethernet
-      autoconnect=true
-
-      [ipv4]
-      method=auto
-      dns={{ image_dns | join(';') }};
-      ignore-auto-dns=true
-
-      [ipv6]
-      method=disabled
+      # Golden image: no DHCP. Addresses come from VMware guest customization at deploy time.
+      [main]
+      no-auto-default=*
 
 - name: Remove the random seed, hostname and the build's leftovers
   ansible.builtin.file:

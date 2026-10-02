@@ -46,7 +46,9 @@
             datastore: "{{ vsphere_datastore }}"
             power_on_after_deploy: true
 
-        - name: Wait for VMware Tools to report an address and hostname
+        # No DHCP on these networks and no login after sealing: the test VM has no address, so the
+        # test checks what VMware Tools report about the guest instead
+        - name: Wait for VMware Tools to report the guest's hostname
           vmware.vmware.vm_info:
             datacenter: "{{ vsphere_datacenter }}"
             name: "{{ test_name }}"
@@ -57,7 +59,6 @@
           delay: 10
           until: >-
             (guest.vms[0].guest.toolsRunningStatus | default('')) == 'guestToolsRunning'
-            and (guest.vms[0].guest.ipAddress | default('', true)) | length > 0
             and (guest.vms[0].guest.hostName | default('', true)) | length > 0
 
         - name: Check the results
@@ -68,7 +69,7 @@
             fail_msg: "{{ test_template }} failed its boot test: {{ guest.vms[0].guest | default('no guest info') }}"
             success_msg: >-
               {{ test_template }} booted: {{ guest.vms[0].guest.guestFullName }},
-              {{ guest.vms[0].guest.hostName }}, {{ guest.vms[0].guest.ipAddress }}
+              hostname {{ guest.vms[0].guest.hostName }}
 
       always:
         - name: Delete {{ test_name }}

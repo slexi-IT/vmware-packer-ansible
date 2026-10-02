@@ -1,0 +1,28 @@
+---
+# Runs in the build VM (vmware_tools connection, PowerShell) - works without any network, which
+# is why it can set the network up. Fixed build address from image.yml (the build network has
+# no DHCP); seal.yml removes it again. Vars: image_build_network {ip, prefix, gateway, dns}
+- name: Fixed build address on the VM's network adapter
+  ansible.windows.win_shell: |
+    $ErrorActionPreference = 'Stop'
+    $nic = Get-NetAdapter -Physical | Where-Object Status -eq 'Up' | Select-Object -First 1
+    if (-not $nic) { throw 'No connected network adapter' }
+    Set-NetIPInterface -InterfaceIndex $nic.ifIndex -Dhcp Disabled
+    Get-NetIPAddress -InterfaceIndex $nic.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+      Remove-NetIPAddress -Confirm:$false
+    Get-NetRoute -InterfaceIndex $nic.ifIndex -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+      Remove-NetRoute -Confirm:$false
+    New-NetIPAddress -InterfaceIndex $nic.ifIndex -IPAddress '{{ image_build_network.ip }}' `
+      -PrefixLength {{ image_build_network.prefix }} -DefaultGateway '{{ image_build_network.gateway }}' | Out-Null
+    Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ServerAddresses '{{ image_build_network.dns | join("','") }}'
+    "$($nic.Name): {{ image_build_network.ip }}/{{ image_build_network.prefix }} via {{ image_build_network.gateway }}"
+  register: build_net
+  changed_when: true
+
+- name: Wait until the gateway answers
+  ansible.windows.win_shell: Test-Connection -TargetName '{{ image_build_network.gateway }}' -Count 1 -Quiet
+  register: gw
+  retries: 12
+  delay: 5
+  until: "'True' in gw.stdout"
+  changed_when: false

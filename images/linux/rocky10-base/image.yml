@@ -14,7 +14,16 @@ image_iso_checksum: sha256:aac6ac3ce781b91a91ce78463405f66c611a5dca4b3840c79e5e0
 image_iso_volume_id: Rocky-10-2-x86_64-dvd
 
 image_timezone: Europe/Zurich
-image_dns: [1.1.1.1]
+
+# Fixed address of the build VM: the build network has no DHCP. Used only while building
+# (installer and the Ansible phase); sealing removes it, so the template carries no address and
+# VMs made from it get theirs from VMware guest customization when they are deployed.
+# Placeholders from the documentation range 192.0.2.0/24: replace with the real build network.
+image_build_network:
+  ip: 192.0.2.10
+  prefix: 24
+  gateway: 192.0.2.1
+  dns: [1.1.1.1]
 
 # Access account baked into the image (SSH key only, passwordless sudo)
 image_admin_user: slexi

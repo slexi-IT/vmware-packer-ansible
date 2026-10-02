@@ -12,12 +12,21 @@
     dest: C:\Windows\Setup\Scripts\
   loop: [SetupComplete.cmd, golden-firstboot.ps1]
 
-# One command, because the build's login stops working halfway: it removes the setup answers
-# (with the build password), gives the built-in Administrator a random password and disables
-# it, clears the event logs and starts sysprep in the background. sysprep generalizes the
+# One command, because the build's login stops working halfway: it removes the build's fixed
+# address, the setup answers (with the build password), gives the built-in Administrator a
+# random password and disables it, clears the event logs and starts sysprep in the background. sysprep generalizes the
 # image (new SID and machine identity on first boot) and powers the VM off.
 - name: Seal and start sysprep
   ansible.windows.win_shell: |
+    # VMs made from the template get their address from VMware guest customization
+    $nic = Get-NetAdapter -Physical | Where-Object Status -eq 'Up' | Select-Object -First 1
+    if ($nic) {
+      Get-NetIPAddress -InterfaceIndex $nic.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Remove-NetIPAddress -Confirm:$false
+      Get-NetRoute -InterfaceIndex $nic.ifIndex -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+        Remove-NetRoute -Confirm:$false
+      Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ResetServerAddresses
+    }
     Remove-Item -Force -ErrorAction SilentlyContinue C:\Windows\Panther\unattend.xml, C:\Windows\Panther\Unattend\*.xml
     foreach ($log in (wevtutil el)) {
       try { [System.Diagnostics.Eventing.Reader.EventLogSession]::GlobalSession.ClearLog($log) } catch { }

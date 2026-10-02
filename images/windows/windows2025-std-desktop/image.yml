@@ -18,6 +18,16 @@ image_timezone: W. Europe Standard Time
 image_locale: en-US
 image_keyboard: "0409:00000409"
 
+# Fixed address of the build VM: the build network has no DHCP. Used only while building
+# (installer and the Ansible phase); sealing removes it, so the template carries no address and
+# VMs made from it get theirs from VMware guest customization when they are deployed.
+# Placeholders from the documentation range 192.0.2.0/24: replace with the real build network.
+image_build_network:
+  ip: 192.0.2.11
+  prefix: 24
+  gateway: 192.0.2.1
+  dns: [1.1.1.1]
+
 # Access account baked into the image: local administrator, random unknown password,
 # SSH key login through the built-in OpenSSH server
 image_admin_user: slexi

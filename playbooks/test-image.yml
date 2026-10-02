@@ -1,8 +1,7 @@
 ---
-# Boot test of a golden image (any image, Linux or Windows): deploy a throwaway VM from the
-# template that carries the channel tag (testing or prod), wait until VMware Tools report the
-# guest, compare OS name and hostname with image_test in images/<os>/<image>/image.yml, delete
-# the VM again.
+# Boot test, for any image (-e image=<image>, -e channel=testing|prod): deploy a VM from the
+# image's template that carries the channel tag, wait until VMware Tools report the guest's
+# hostname, compare OS name and hostname with image_test in its image.yml, delete the VM.
 - name: Boot-test a golden image
   hosts: localhost
   connection: local
@@ -18,7 +17,7 @@
     VMWARE_VALIDATE_CERTS: "{{ (not (vsphere_insecure | bool)) | string | lower }}"
 
   tasks:
-    - name: Load the image (images/<os>/<image>/image.yml)
+    - name: Load images/<os>/{{ image }}/image.yml
       ansible.builtin.include_tasks: tasks/load_image.yml
 
     - name: Look up the image's templates
@@ -48,14 +47,14 @@
             datastore: "{{ vsphere_datastore }}"
             power_on_after_deploy: true
 
-        # The test VM is deployed without guest customization on a network without DHCP, so it has
-        # no address, and the test has no guest login. It relies on what VMware Tools report.
+        # Deployed without guest customization on a network without DHCP, the VM has no address;
+        # the test only uses what VMware Tools report through vCenter.
         - name: Wait for VMware Tools to report the guest's hostname
           vmware.vmware.vm_info:
             datacenter: "{{ vsphere_datacenter }}"
             name: "{{ test_name }}"
             schema: vsphere
-            properties: [guest.hostName, guest.ipAddress, guest.guestFullName, guest.toolsRunningStatus]
+            properties: [guest.hostName, guest.guestFullName, guest.toolsRunningStatus]
           register: guest
           retries: "{{ boot_retries }}"
           delay: 10

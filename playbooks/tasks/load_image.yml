@@ -1,37 +1,34 @@
 ---
-# Find images/<os>/<image>/ for the requested image and load its image.yml.
-# Every playbook handles every image (Linux and Windows); all OS-specific settings, templates
-# and scripts live in the image's folder. Sets image_dir.
+# Find images/<os>/<image>/image.yml for -e image=<image> and load it.
+# Sets image_settings_file, image_dir and image_os (the <os> folder name: linux or windows).
 - name: Check that an image was given
   ansible.builtin.assert:
-    that:
-      - image is defined
-      - image is match('^[a-z0-9][a-z0-9-]*$')
-    fail_msg: "Pass the image to work on, e.g. -e image=rocky10-base (folders under images/<os>/)"
+    that: image is defined and image is match('^[a-z0-9][a-z0-9-]*$')
+    fail_msg: "Pass the image to build, e.g. -e image=rocky10-base (a folder under images/<os>/)"
 
-# images/<os>/<image>/image.yml; the OS folder is not part of the image name
-- name: Find the image's folder
+- name: Find image.yml files under images/
   ansible.builtin.find:
     paths: "{{ playbook_dir }}/../images"
     patterns: image.yml
     recurse: true
     depth: 3
   register: image_files
-  delegate_to: localhost
 
-- name: Keep the one for this image
+- name: Pick images/<os>/{{ image }}/image.yml
   ansible.builtin.set_fact:
-    image_settings: "{{ image_files.files | map(attribute='path') | select('search', '/' ~ image ~ '/image.yml$') | list }}"
+    image_matches: "{{ image_files.files | map(attribute='path') | select('search', '/' ~ image ~ '/image.yml$') | list }}"
 
-- name: Stop unless exactly one image folder matches
+- name: Stop unless exactly one folder is called {{ image }}
   ansible.builtin.assert:
-    that: image_settings | length == 1
-    fail_msg: "No (or more than one) images/<os>/{{ image }}/image.yml found"
+    that: image_matches | length == 1
+    fail_msg: "Found {{ image_matches | length }} folders images/<os>/{{ image }}/ with an image.yml; need exactly one"
 
-- name: Load the image settings
+- name: Load {{ image_matches[0] }}
   ansible.builtin.include_vars:
-    file: "{{ image_settings[0] }}"
+    file: "{{ image_matches[0] }}"
 
-- name: Remember the image folder
+- name: Remember where the image lives
   ansible.builtin.set_fact:
-    image_dir: "{{ image_settings[0] | dirname }}"
+    image_settings_file: "{{ image_matches[0] }}"
+    image_dir: "{{ image_matches[0] | dirname }}"
+    image_os: "{{ image_matches[0] | dirname | dirname | basename }}"

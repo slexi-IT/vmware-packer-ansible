@@ -4,7 +4,8 @@
 - name: Check the install finished
   ansible.builtin.include_tasks: "{{ tasks_dir }}/linux/check_install.yml"
 
-# Image-specific steps go here (packages from the ISO, hardening, ...)
+# Image-specific steps go here (configuration, hardening, ...). The install ISO is no longer
+# attached: Packer removes the CD drives when it finishes (remove_cdrom).
 
 - name: Seal the image and power off
   ansible.builtin.include_tasks: "{{ tasks_dir }}/linux/seal.yml"

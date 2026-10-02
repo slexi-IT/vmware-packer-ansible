@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Windows Server 2025 unattended setup for the golden image build, rendered by
-     playbooks/build-image.yml. Contains the per-build Administrator password, which Ansible uses to
-     log in through VMware Tools: lives only on the build CD and is deleted from
-     C:\Windows\Panther when the image is sealed (playbooks/tasks/windows/seal.yml). -->
+     playbooks/build-image.yml. Contains the Administrator password generated for this build,
+     which Ansible uses to log in through VMware Tools. Setup copies this file to
+     C:\Windows\Panther\unattend.xml; playbooks/tasks/windows/seal.yml deletes that copy and gives
+     Administrator a new random password. -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
   <settings pass="windowsPE">
     <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">

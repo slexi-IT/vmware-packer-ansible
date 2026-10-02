@@ -1,6 +1,6 @@
 ---
 # Runs in the build VM (vmware_tools connection), last: remove everything that must be unique per
-# machine and the build's own access, then power off.
+# machine, plus the build's leftovers, then power off. Root keeps its password.
 - name: Empty machine-id (first boot generates a new one, so clones never share it)
   ansible.builtin.copy:
     content: ""
@@ -41,8 +41,8 @@
     - /var/lib/systemd/random-seed
     - /etc/hostname
     - /root/build-complete
-    # Anaconda's copies of the kickstart: original-ks.cfg has the per-build root password in
-    # plain text, anaconda-ks.cfg its hash
+    # Anaconda's copies of the kickstart: original-ks.cfg has root's password in plain text,
+    # anaconda-ks.cfg its hash
     - /root/anaconda-ks.cfg
     - /root/original-ks.cfg
     - /root/.bash_history
@@ -55,15 +55,7 @@
     find /var/log -type f -exec truncate -s 0 {} +
   changed_when: true
 
-- name: Check the root password hash from image.yml
-  ansible.builtin.assert:
-    that: image_root_password_hash is match('^\$6\$[^:\s]+$')
-    fail_msg: "image_root_password_hash in image.yml is not a SHA-512 crypt hash ($6$...); create one with: openssl passwd -6"
-
-# Last step, in one command: once root's password is replaced, Ansible's login through VMware
-# Tools (with the per-build password) stops working. shutdown -P +1 only schedules the power-off
-# one minute ahead, so the command returns before the VM goes down.
-- name: Set root's password from image.yml and power off
-  ansible.builtin.shell: usermod -p '{{ image_root_password_hash }}' root && shutdown -P +1
+# -P +1 schedules the power-off one minute ahead, so the command returns to Ansible first
+- name: Power off
+  ansible.builtin.command: shutdown -P +1
   changed_when: true
-  no_log: true

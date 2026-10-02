@@ -8,7 +8,7 @@ vsphere_datacenter: REPLACE_DATACENTER
 vsphere_cluster: REPLACE_CLUSTER
 vsphere_datastore: REPLACE_DATASTORE
 vsphere_network: REPLACE_PORTGROUP
-# Self-signed vCenter certificate in the lab; set to false with a trusted certificate
+# true: do not verify the TLS certificates of vCenter and the ESXi hosts (self-signed in the lab)
 vsphere_insecure: true
 
 # Golden images are vSphere VM templates named <image>-<version> in this folder
@@ -22,11 +22,11 @@ vsphere_work_folder: Golden images/Work
 vsphere_channel_category: golden-channel
 vsphere_channels: [testing, prod]
 
-# Install media on a datastore
+# Install ISOs: [vsphere_iso_datastore] vsphere_iso_folder/<file>; the file names are in image.yml
 vsphere_iso_datastore: REPLACE_DATASTORE
 vsphere_iso_folder: iso
 # VMware Tools for Windows, shipped with ESXi
 vsphere_tools_windows_iso: "[] /vmimages/tools-isoimages/windows.iso"
 
-# How many templates per image to keep (besides the ones tagged testing / prod)
+# promote-image.yml keeps the newest this many templates per image, plus the one tagged prod
 vsphere_keep_versions: 3

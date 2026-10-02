@@ -45,9 +45,9 @@ variable "vm_name" {
   type        = string
   description = "Name of the build VM, e.g. build-rocky10-base-2026.10.02-0715"
 }
-variable "ks_file" {
+variable "build_dir" {
   type        = string
-  description = "Rendered kickstart; Anaconda loads ks.cfg automatically from a disk labelled OEMDRV"
+  description = "Build directory with the rendered ks.cfg (playbooks/build-image.yml)"
 }
 
 source "vsphere-iso" "rocky10-base" {
@@ -79,8 +79,9 @@ source "vsphere-iso" "rocky10-base" {
 
   iso_paths    = [var.iso_path]
   iso_checksum = var.iso_checksum
-  # Kickstart, init.sh and the open-vm-tools RPMs: uploaded as a second CD labelled OEMDRV
-  cd_files     = [var.ks_file, "${path.root}/files/init.sh", "${path.root}/files/rpms/*.rpm"]
+  # Second CD, labelled OEMDRV: Anaconda reads ks.cfg from a disk with that label on its own.
+  # It also carries init.sh and the RPMs the kickstart installs.
+  cd_files     = ["${var.build_dir}/ks.cfg", "${path.root}/files/init.sh", "${path.root}/files/rpms/*.rpm"]
   cd_label     = "OEMDRV"
   remove_cdrom = true
 
@@ -89,7 +90,7 @@ source "vsphere-iso" "rocky10-base" {
   boot_command = ["<up><enter>"]
 
   # No connection into the guest: the kickstart ends with poweroff and Packer waits for it.
-  # Ansible later checks the kickstart's completion marker through VMware Tools.
+  # Ansible then checks through VMware Tools that the kickstart got to its end (/root/build-complete).
   communicator     = "none"
   shutdown_timeout = "30m"
   # The build VM stays (powered off) for the Ansible phase

@@ -32,8 +32,6 @@ awx_credentials:
       Account for Packer, the vmware.vmware modules and the VMware Tools connection: needs rights
       on the work and template folders, the datastore, tags, and VirtualMachine.GuestOperations.*
 
-awx_instance_groups: []
-
 awx_projects:
   - name: VMware golden images
     description: Golden image builds on vSphere (Rocky Linux, Windows Server), from GitHub slexi-IT/vmware-packer-ansible

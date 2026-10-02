@@ -50,9 +50,9 @@ variable "tools_iso_path" {
   type        = string
   description = "VMware Tools for Windows, e.g. [] /vmimages/tools-isoimages/windows.iso"
 }
-variable "autounattend_file" {
+variable "build_dir" {
   type        = string
-  description = "Rendered autounattend.xml (contains the per-build Administrator password)"
+  description = "Build directory with the rendered autounattend.xml (playbooks/build-image.yml)"
 }
 
 source "vsphere-iso" "windows2025-std-desktop" {
@@ -87,7 +87,7 @@ source "vsphere-iso" "windows2025-std-desktop" {
   iso_paths    = [var.iso_path, var.tools_iso_path]
   iso_checksum = var.iso_checksum
   # Setup finds autounattend.xml on this CD; the first logon runs install-vmware-tools.cmd from it
-  cd_files     = [var.autounattend_file, "${path.root}/files/install-vmware-tools.cmd"]
+  cd_files     = ["${var.build_dir}/autounattend.xml", "${path.root}/files/install-vmware-tools.cmd"]
   cd_label     = "PACKER"
   remove_cdrom = true
 

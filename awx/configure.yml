@@ -34,29 +34,6 @@
       loop_control:
         label: "{{ item.name }}"
 
-    - name: Container groups
-      awx.awx.instance_group:
-        name: "{{ item.name }}"
-        is_container_group: true
-        pod_spec_override: "{{ lookup('ansible.builtin.file', item.pod_spec_file) }}"
-      loop: "{{ awx_instance_groups }}"
-      loop_control:
-        label: "{{ item.name }}"
-
-    # A project renamed in config.yml keeps its history: rename the old one instead of creating a new one
-    - name: Rename projects
-      awx.awx.project:
-        name: "{{ item.previous_name }}"
-        new_name: "{{ item.name }}"
-        organization: "{{ awx_organization }}"
-        update_project: false
-        wait: false
-      loop: "{{ awx_projects | selectattr('previous_name', 'defined') | list }}"
-      loop_control:
-        label: "{{ item.previous_name }} -> {{ item.name }}"
-      when: >-
-        query('awx.awx.controller_api', 'projects', query_params={'name': item.previous_name}) | length > 0
-
     - name: Projects
       awx.awx.project:
         name: "{{ item.name }}"
@@ -86,7 +63,6 @@
         playbook: "{{ item.playbook }}"
         inventory: "{{ item.inventory }}"
         execution_environment: "{{ item.execution_environment }}"
-        instance_groups: "{{ item.instance_groups | default(omit) }}"
         credentials: "{{ item.credentials | default(omit) }}"
         ask_variables_on_launch: false
         survey_enabled: "{{ item.survey_file is defined }}"
@@ -94,13 +70,6 @@
       loop: "{{ awx_job_templates }}"
       loop_control:
         label: "{{ item.name }}"
-
-    - name: Retired job templates
-      awx.awx.job_template:
-        name: "{{ item }}"
-        organization: "{{ awx_organization }}"
-        state: absent
-      loop: "{{ awx_retired_job_templates | default([]) }}"
 
     # --- one set of objects per image ---------------------------------------------------------
 
@@ -125,7 +94,6 @@
         playbook: "{{ item.1.playbook }}"
         inventory: "{{ awx_image_job_defaults.inventory }}"
         execution_environment: "{{ awx_image_job_defaults.execution_environment }}"
-        instance_groups: "{{ awx_image_job_defaults.instance_groups | default(omit) }}"
         credentials: "{{ awx_image_job_defaults.credentials | default(omit) }}"
         # The image is fixed per template; only the boot test asks which channel to boot
         extra_vars: {image: "{{ item.0.image }}"}

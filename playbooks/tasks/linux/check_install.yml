@@ -1,15 +1,13 @@
 ---
-# Runs in the build VM (vmware_tools connection). Anaconda runs the kickstart's %post sections in
-# order and aborts the install at the first one that fails (--erroronfail, set -e). The last
-# section writes this run's marker, so it exists only if all of them succeeded; a VM that powered
-# off for any other reason (crash, Anaconda halting) has none.
-- name: Read the kickstart's completion marker
-  ansible.builtin.slurp:
-    src: /root/build-complete
-  register: marker
-  failed_when: false
+# Runs in the build VM (vmware_tools connection). The kickstart's last %post section creates
+# /root/build-complete; Anaconda aborts at the first failing section, so the file exists only if
+# the whole install succeeded.
+- name: Check for /root/build-complete
+  ansible.builtin.stat:
+    path: /root/build-complete
+  register: build_complete
 
 - name: Stop unless the install finished
   ansible.builtin.assert:
-    that: (marker.content | default('') | b64decode | trim) == build_marker
-    fail_msg: "The install did not finish: no completion marker in /root/build-complete"
+    that: build_complete.stat.exists
+    fail_msg: "/root/build-complete is missing: the kickstart did not finish (see /root/ks-*.log in the VM)"

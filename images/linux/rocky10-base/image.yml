@@ -1,12 +1,8 @@
 ---
-# Settings for the rocky10-base golden image on vSphere, read by playbooks/build-image.yml
-# (site settings such as datastore and folders come from vmware.yml)
+# rocky10-base: Rocky Linux 10.2 minimal, installed offline from the ISO, with open-vm-tools.
+# Read by the playbooks in playbooks/; site settings (datastore, folders, ...) are in vmware.yml.
 
 image_name: rocky10-base
-# Informational: matches the folder images/linux/. Nothing reads it; the AWX labels come from
-# awx_images in awx/config.yml.
-image_os: linux
-image_description: Rocky Linux 10.2 minimal, offline install from the ISO, open-vm-tools, sealed
 
 # Install media on a datastore
 image_iso_path: "[{{ vsphere_iso_datastore }}] {{ vsphere_iso_folder }}/Rocky-10.2-x86_64-minimal.iso"
@@ -27,31 +23,7 @@ image_build_network:
   gateway: 192.0.2.1
   dns: [1.1.1.1]
 
-# Root password of every VM made from the template, as a SHA-512 crypt hash
-# (create with: openssl passwd -6). There is no other account. The password works on the
-# console and for VMware Tools guest operations; Rocky's sshd default (PermitRootLogin
-# prohibit-password) does not accept it over SSH.
-# The build itself logs in as root with a random per-build password; the last sealing step
-# (playbooks/tasks/linux/seal.yml) replaces it with this hash, and refuses a value that is not
-# a $6$ hash, such as the placeholder below.
-# This file is in Git: everyone who can read the repository can attack the hash offline, and
-# all VMs from the template share the password. Ansible Vault would keep it out of plain view.
-image_root_password_hash: "REPLACE with the output of: openssl passwd -6"
-
-# --- how build-image.yml drives this image -------------------------------------------------
-image_templates:
-  - {src: ks.cfg.j2, dest: ks.cfg}
-# Extra Packer variables; {workdir} is replaced with the build's work directory
-image_packer_vars:
-  ks_file: "{workdir}/ks.cfg"
-# Ansible's login through VMware Tools after the install (root with the per-build password)
-image_guest_user: root
-image_guest_shell: sh
-image_guest_python: /usr/bin/python3
-# Steps Ansible runs in the build VM
-image_configure_tasks: configure.yml
-
-# --- what test-image.yml expects from a VM deployed from this image -------------------------
+# What test-image.yml expects from a VM deployed from the template
 image_test:
   # VMware Tools' name for the guest OS
   os: Rocky Linux

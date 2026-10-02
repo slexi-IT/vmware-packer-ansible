@@ -1,6 +1,6 @@
 # Rocky Linux 10 golden image - unattended install (vSphere), rendered by playbooks/build-image.yml
-# Generic on purpose: no hostname, no fixed address. Everything per-VM is set when a VM is
-# created from the image, not here.
+# No hostname and no per-VM settings: those come from VMware guest customization when a VM is
+# deployed. The fixed address below belongs to the build VM and is removed when sealing.
 cmdline
 # Offline build: every package comes from the ISO, no network repositories
 cdrom
@@ -12,12 +12,10 @@ timezone {{ image_timezone }} --utc
 {% set bits = '1' * (n.prefix | int) ~ '0' * (32 - (n.prefix | int)) %}
 network --bootproto=static --ip={{ n.ip }} --netmask={{ [bits[0:8], bits[8:16], bits[16:24], bits[24:32]] | map('int', base=2) | join('.') }} --gateway={{ n.gateway }} --nameserver={{ n.dns | join(',') }} --device=link --activate --hostname=localhost.localdomain
 
-# Per-build root password, only for Ansible's login through VMware Tools (guest operations).
-# The seal step locks root again and deletes the kickstart copies Anaconda keeps in /root.
+# Per-build root password: Ansible logs in with it through VMware Tools (guest operations).
+# The last sealing step replaces it with image_root_password_hash from image.yml and deletes the
+# copies of this kickstart that Anaconda leaves in /root.
 rootpw --plaintext {{ build_password }}
-# Access account for VMs made from this image: SSH key only, password locked
-user --name={{ image_admin_user }} --groups=wheel --lock
-sshkey --username={{ image_admin_user }} "{{ image_admin_ssh_key }}"
 
 selinux --enforcing
 firewall --enabled --service=ssh
@@ -32,13 +30,6 @@ bootloader --timeout=1
 
 %packages
 @^minimal-environment
-%end
-
-%post --interpreter=/bin/bash --erroronfail --log=/root/ks-post.log
-# Stop at the first failing command; --erroronfail alone only checks the last one
-set -euxo pipefail
-echo '{{ image_admin_user }} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/{{ image_admin_user }}
-chmod 0440 /etc/sudoers.d/{{ image_admin_user }}
 %end
 
 # Use the OEMDRV CD from inside the new system: install the RPMs shipped on it

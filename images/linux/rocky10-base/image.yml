@@ -3,7 +3,8 @@
 # (site settings such as datastore and folders come from vmware.yml)
 
 image_name: rocky10-base
-# Folder images/linux/ ; also the AWX label of this image's job templates
+# Informational: matches the folder images/linux/. Nothing reads it; the AWX labels come from
+# awx_images in awx/config.yml.
 image_os: linux
 image_description: Rocky Linux 10.2 minimal, offline install from the ISO, open-vm-tools, sealed
 
@@ -15,9 +16,10 @@ image_iso_volume_id: Rocky-10-2-x86_64-dvd
 
 image_timezone: Europe/Zurich
 
-# Fixed address of the build VM: the build network has no DHCP. Used only while building
-# (installer and the Ansible phase); sealing removes it, so the template carries no address and
-# VMs made from it get theirs from VMware guest customization when they are deployed.
+# Fixed address of the build VM: the build network has no DHCP. The kickstart configures it
+# (install and the installed system); the Ansible phase does not need it, because VMware Tools
+# work without a network. Sealing deletes the network profile, so the template carries no address
+# and VMs made from it get theirs from VMware guest customization when they are deployed.
 # Placeholders from the documentation range 192.0.2.0/24: replace with the real build network.
 image_build_network:
   ip: 192.0.2.10
@@ -25,9 +27,16 @@ image_build_network:
   gateway: 192.0.2.1
   dns: [1.1.1.1]
 
-# Access account baked into the image (SSH key only, passwordless sudo)
-image_admin_user: slexi
-image_admin_ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJTpbiuPOb459X11qmf9RnVqE1RhKv1XeMRDeHIdZqr3"
+# Root password of every VM made from the template, as a SHA-512 crypt hash
+# (create with: openssl passwd -6). There is no other account. The password works on the
+# console and for VMware Tools guest operations; Rocky's sshd default (PermitRootLogin
+# prohibit-password) does not accept it over SSH.
+# The build itself logs in as root with a random per-build password; the last sealing step
+# (playbooks/tasks/linux/seal.yml) replaces it with this hash, and refuses a value that is not
+# a $6$ hash, such as the placeholder below.
+# This file is in Git: everyone who can read the repository can attack the hash offline, and
+# all VMs from the template share the password. Ansible Vault would keep it out of plain view.
+image_root_password_hash: "REPLACE with the output of: openssl passwd -6"
 
 # --- how build-image.yml drives this image -------------------------------------------------
 image_templates:
@@ -47,5 +56,5 @@ image_test:
   # VMware Tools' name for the guest OS
   os: Rocky Linux
   hostname: '^localhost(\.localdomain)?$'
-  # seconds until VMware Tools report an address
+  # seconds the boot test waits for VMware Tools to report the guest's hostname
   boot_timeout: 300

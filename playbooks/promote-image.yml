@@ -1,6 +1,7 @@
 ---
-# Promote a golden image (any image, Linux or Windows): move the "prod" tag to the template tagged "testing", then delete old
-# templates. Kept: the newest vsphere_keep_versions templates plus the testing / prod ones.
+# Promote a golden image (any image, Linux or Windows): move the "prod" tag to the template that
+# carries "testing", then delete old templates. Kept: the newest vsphere_keep_versions templates
+# and the one that just became "prod".
 - name: Promote a golden image
   hosts: localhost
   connection: local

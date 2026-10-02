@@ -1,13 +1,14 @@
 #!/bin/bash
-# Post-install customisation. The kickstart runs this file straight from the OEMDRV CD,
-# chrooted into the installed system, as the last %post step.
+# Login banners. The kickstart runs this file straight from the OEMDRV CD, chrooted into the
+# installed system, in the %post section that also installs the RPMs from that CD.
 set -euo pipefail
 
 ESC=$'\e'
 RESET="${ESC}[0m"
 DIM="${ESC}[2m"
 BOLD="${ESC}[1m"
-# Rocky green, light to dark (256-colour palette works on the console, SSH and most terminals)
+# Rocky green, light to dark, as 256-colour codes (the Linux console shows the nearest of its
+# 16 colours; SSH terminals show them as they are)
 SHADES=(84 78 42 36 35 29)
 
 ART=(

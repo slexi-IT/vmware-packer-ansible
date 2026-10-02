@@ -5,6 +5,7 @@ collections:
   # ansible.windows (3.5, from the base image) the Windows modules run through it.
   - name: vmware.vmware
     version: 2.11.0
-  # General-purpose filters and modules (e.g. dict_kv); 13.x needs ansible-core 2.18
+  # General-purpose filters and modules, available for new tasks; the playbooks do not use it yet.
+  # 13.x needs ansible-core 2.18 or newer.
   - name: community.general
     version: 13.4.0

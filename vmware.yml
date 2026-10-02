@@ -1,7 +1,8 @@
 ---
-# vSphere site settings for all image builds on this branch. Fill in once a vCenter exists.
+# vSphere site settings for all image builds in this repository. Fill in once a vCenter exists.
 # Credentials are not here: AWX's VMware vCenter credential provides VMWARE_HOST,
-# VMWARE_USER and VMWARE_PASSWORD to the job; the vmware.vmware modules read them from there.
+# VMWARE_USER and VMWARE_PASSWORD to the job as environment variables; Packer, the
+# vmware.vmware modules and the vmware_tools connection read them from there.
 
 vsphere_datacenter: REPLACE_DATACENTER
 vsphere_cluster: REPLACE_CLUSTER
@@ -12,7 +13,8 @@ vsphere_insecure: true
 
 # Golden images are vSphere VM templates named <image>-<version> in this folder
 vsphere_template_folder: Golden images
-# Build VMs (while Packer works) and boot-test VMs
+# Build VMs for the whole build (Packer install and Ansible phase; a VM whose Ansible phase
+# failed stays here) and the boot-test VMs
 vsphere_work_folder: Golden images/Work
 
 # Channels are vSphere tags in this category, attached to templates: the template of an image

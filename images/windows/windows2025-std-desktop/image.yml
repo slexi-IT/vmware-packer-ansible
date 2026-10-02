@@ -3,7 +3,8 @@
 # playbooks/build-image.yml (site settings come from vmware.yml)
 
 image_name: windows2025-std-desktop
-# Folder images/windows/ ; also the AWX label of this image's job templates
+# Informational: matches the folder images/windows/. Nothing reads it; the AWX labels come from
+# awx_images in awx/config.yml.
 image_os: windows
 image_description: Windows Server 2025 Standard (Desktop Experience) evaluation, VMware Tools, updated; not sysprepped (VMware guest customization does it)
 
@@ -18,8 +19,9 @@ image_timezone: W. Europe Standard Time
 image_locale: en-US
 image_keyboard: "0409:00000409"
 
-# Fixed address of the build VM: the build network has no DHCP. Used only while building
-# (installer and the Ansible phase); sealing removes it, so the template carries no address and
+# Fixed address of the build VM: the build network has no DHCP. Setup does not need a network;
+# the first Ansible step (playbooks/tasks/windows/network.yml) sets this address through VMware
+# Tools so Windows Update can run, and sealing removes it again. The template carries no address;
 # VMs made from it get theirs from VMware guest customization when they are deployed.
 # Placeholders from the documentation range 192.0.2.0/24: replace with the real build network.
 image_build_network:
@@ -48,5 +50,5 @@ image_test:
   os: Windows Server 2025
   # Not sysprepped: a VM deployed without customization keeps the build's computer name
   hostname: '(?i)^golden-build$'
-  # seconds until VMware Tools report the guest
+  # seconds the boot test waits for VMware Tools to report the guest's hostname
   boot_timeout: 600

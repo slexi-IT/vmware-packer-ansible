@@ -10,7 +10,8 @@
 #
 # Needs AWX's VMware vCenter credential (VMWARE_HOST / VMWARE_USER / VMWARE_PASSWORD), which the
 # vmware.vmware modules, Packer and the vmware_tools connection all read. The VMware Tools
-# connection also talks to the ESXi host running the VM, so that must be reachable on 443.
+# connection sends guest file transfers straight to the ESXi host running the VM, so AWX must
+# reach that host on port 443 as well.
 
 - name: Install with Packer
   hosts: localhost
@@ -39,7 +40,9 @@
         image_version: "{{ now(utc=true).strftime('%Y.%m.%d-%H%M') }}"
         # Unique per run, so a marker from another build can never count
         build_marker: "BUILD-COMPLETE {{ image }} {{ lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters', 'digits'], length=16) }}"
-        # Ansible's login through VMware Tools during the build; the seal step locks it again
+        # Password of the guest account Ansible logs in with through VMware Tools (root for Rocky,
+        # Administrator for Windows). Sealing replaces it: Rocky gets image_root_password_hash from
+        # image.yml, Windows a random password.
         build_password: "{{ lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters', 'digits'], length=24) }}Aa1"
 
     - name: Name the template and the build VM

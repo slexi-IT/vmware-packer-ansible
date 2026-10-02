@@ -1,6 +1,8 @@
 ---
-# Boot test of a golden image (any image, Linux or Windows; expectations from images/<os>/<image>/): deploy a throwaway VM from the template that carries the channel
-# tag (testing or prod), check what VMware Tools report about it, delete it again.
+# Boot test of a golden image (any image, Linux or Windows): deploy a throwaway VM from the
+# template that carries the channel tag (testing or prod), wait until VMware Tools report the
+# guest, compare OS name and hostname with image_test in images/<os>/<image>/image.yml, delete
+# the VM again.
 - name: Boot-test a golden image
   hosts: localhost
   connection: local
@@ -46,8 +48,8 @@
             datastore: "{{ vsphere_datastore }}"
             power_on_after_deploy: true
 
-        # No DHCP on these networks and no login after sealing: the test VM has no address, so the
-        # test checks what VMware Tools report about the guest instead
+        # The test VM is deployed without guest customization on a network without DHCP, so it has
+        # no address, and the test has no guest login. It relies on what VMware Tools report.
         - name: Wait for VMware Tools to report the guest's hostname
           vmware.vmware.vm_info:
             datacenter: "{{ vsphere_datacenter }}"

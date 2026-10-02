@@ -1,7 +1,8 @@
 ---
-# Runs in the build VM (vmware_tools connection, PowerShell). Installs every available update,
-# rebooting and searching again until nothing is left. -e build_windows_update=false skips it
-# for quick test builds.
+# Runs in the build VM (vmware_tools connection, PowerShell). Installs the available updates in
+# all categories except titles containing "Preview"; with reboot: true the module reboots when an
+# update requires it and carries on installing afterwards. -e build_windows_update=false skips
+# this step for quick test builds.
 - name: Install Windows updates
   ansible.windows.win_updates:
     category_names: ["*"]

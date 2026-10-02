@@ -8,7 +8,7 @@ packer {
 }
 
 # Packer only installs: setup runs unattended from autounattend.xml, the first logon installs
-# VMware Tools and powers the VM off. Everything after that (updates, access account, sealing,
+# VMware Tools and powers the VM off. Everything after that (network, updates, cleanup, sealing,
 # template, tags) is done by Ansible through VMware Tools - no WinRM. No sysprep: VMware guest
 # customization runs it when VMs are deployed from the template.
 
@@ -95,8 +95,10 @@ source "vsphere-iso" "windows2025-std-desktop" {
   boot_wait    = "3s"
   boot_command = ["<spacebar><wait><spacebar>"]
 
-  # No connection into the guest: the first logon powers the VM off once VMware Tools are in,
-  # and Packer waits for that. Setup plus first logon take well under an hour.
+  # No connection into the guest. install-vmware-tools.cmd shuts the VM down 30 seconds after the
+  # VMware Tools installer returns, whether or not it succeeded; a failed install shows up when
+  # build-image.yml waits for VMware Tools. shutdown_timeout is the limit for setup plus first
+  # logon (setup took about 5 minutes in QEMU tests).
   communicator        = "none"
   shutdown_timeout    = "1h"
   # The build VM stays (powered off) for the Ansible phase

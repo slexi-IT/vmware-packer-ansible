@@ -192,7 +192,8 @@
       loop_control:
         label: "{{ item.image }}"
 
-    # Each team may run its own images' templates and pipeline and approve its releases
+    # Each image's team gets the execute role on the image's job templates and pipeline and the
+    # approval role on the pipeline
     - name: Team permissions on job templates
       awx.awx.role:
         team: "{{ item.team }}"

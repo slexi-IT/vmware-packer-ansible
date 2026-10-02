@@ -15,5 +15,5 @@
 - name: Shrink the image
   ansible.builtin.include_tasks: "{{ tasks_dir }}/windows/cleanup.yml"
 
-- name: Seal with sysprep (powers the VM off)
+- name: Seal and shut down (no sysprep: VMware guest customization runs it at deploy time)
   ansible.builtin.include_tasks: "{{ tasks_dir }}/windows/seal.yml"

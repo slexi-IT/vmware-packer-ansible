@@ -208,7 +208,7 @@
           Configuring {{ build_vm }} failed (see above). The VM is left in
           {{ vsphere_work_folder }} for inspection; delete it when done.
 
-    # Sealing ends with the guest powering itself off (sysprep can take a while)
+    # Sealing ends with the guest powering itself off
     - name: Wait for {{ build_vm }} to power off
       vmware.vmware.vm_info:
         datacenter: "{{ vsphere_datacenter }}"

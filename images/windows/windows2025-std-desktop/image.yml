@@ -5,7 +5,7 @@
 image_name: windows2025-std-desktop
 # Folder images/windows/ ; also the AWX label of this image's job templates
 image_os: windows
-image_description: Windows Server 2025 Standard (Desktop Experience) evaluation, VMware Tools, updated, sysprepped
+image_description: Windows Server 2025 Standard (Desktop Experience) evaluation, VMware Tools, updated; not sysprepped (VMware guest customization does it)
 
 # Install media on a datastore
 image_iso_path: "[{{ vsphere_iso_datastore }}] {{ vsphere_iso_folder }}/Windows-Server-2025-eval-26100.1742-x64-en-us.iso"
@@ -51,7 +51,7 @@ image_configure_tasks: configure.yml
 image_test:
   # VMware Tools' name for the guest OS
   os: Windows Server 2025
-  # sysprep's specialize pass gives every VM a random WIN-... name
-  hostname: '^WIN-[A-Z0-9]+$'
-  # specialize and OOBE reboot the VM before VMware Tools report an address
-  boot_timeout: 900
+  # Not sysprepped: a VM deployed without customization keeps the build's computer name
+  hostname: '(?i)^golden-build$'
+  # seconds until VMware Tools report the guest
+  boot_timeout: 600

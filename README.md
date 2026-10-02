@@ -12,7 +12,7 @@ network path from AWX into the build VM.
 | Phase | Tool | Rocky Linux | Windows Server |
 |---|---|---|---|
 | 1. Install | Packer `vsphere-iso`, communicator `none` | Kickstart from a CD labelled `OEMDRV`, `open-vm-tools` from the same CD, per-build root password, `poweroff` | `autounattend.xml`, per-build Administrator password; the first logon installs VMware Tools from the ESXi tools ISO and shuts down |
-| 2. Configure | Ansible through VMware Tools | Check the kickstart's completion marker, seal (machine-id, SSH host keys, network profile, logs), lock root, power off | Windows Update (with reboots), OpenSSH + access account, cleanup, sysprep (powers off) |
+| 2. Configure | Ansible through VMware Tools | Check the kickstart's completion marker, seal (machine-id, SSH host keys, network profile, logs), lock root, power off | Windows Update (with reboots), OpenSSH + access account, cleanup, seal (build address, setup answers, logs), shut down; **no sysprep** |
 | 3. Publish | `vmware.vmware` | Build VM → template `<image>-<version>`, build VM deleted, template tagged `testing` | same |
 
 The build VM is called `build-<image>-<version>` and lives in `vsphere_work_folder` until
@@ -24,11 +24,19 @@ The build network has no DHCP. Each image's `image.yml` sets the build VM's fixe
 `image_build_network` (address, prefix, gateway, DNS): the Rocky kickstart uses it during the
 install, Windows gets it as the first Ansible step (Windows Update needs it). Sealing removes it
 again, so **templates carry no address**: Rocky has no network profile and NetworkManager's
-automatic DHCP profiles are off; Windows' adapter is reset before sysprep. VMs made from a
+automatic DHCP profiles are off; Windows' adapter is reset before shutdown. VMs made from a
 template get their address from VMware guest customization when they are deployed.
 
 The boot test therefore checks what VMware Tools report (Tools running, OS, hostname), not an
 address.
+
+## Windows: sysprep happens at deploy time
+
+The Windows template is **not** generalized. Deploy Windows VMs from it **with a VMware guest
+customization specification**: customization runs sysprep, which gives every VM its own SID,
+computer name, address and Administrator password. A template that was already sysprepped would
+get in customization's way. Without customization, a VM keeps the build's identity
+(computer name `golden-build`) - fine for the boot test, not for real VMs.
 
 ## Repository layout
 
@@ -48,7 +56,7 @@ address.
 | Image | Source | Contents |
 |---|---|---|
 | `linux/rocky10-base` | Rocky Linux 10.2 minimal ISO | Offline install, UEFI, PVSCSI/VMXNET3, open-vm-tools, SELinux enforcing, no network configuration (no DHCP), access account `slexi` (SSH key) |
-| `windows/windows2025-std-desktop` | Windows Server 2025 evaluation ISO | Standard with Desktop Experience, UEFI/GPT, VMware Tools, all updates, OpenSSH with access account `slexi` (SSH key), sysprepped; the built-in Administrator is disabled |
+| `windows/windows2025-std-desktop` | Windows Server 2025 evaluation ISO | Standard with Desktop Experience, UEFI/GPT, VMware Tools, all updates, OpenSSH with access account `slexi` (SSH key); **not sysprepped**, built-in Administrator with a random password |
 
 Adding an image: a new folder under `images/<os>/` with `image.yml`, a Packer template,
 install answers and `configure.yml` (built from the shared steps in `playbooks/tasks/<os>/`),

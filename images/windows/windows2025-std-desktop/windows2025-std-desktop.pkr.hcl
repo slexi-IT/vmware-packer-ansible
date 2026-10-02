@@ -8,8 +8,9 @@ packer {
 }
 
 # Packer only installs: setup runs unattended from autounattend.xml, the first logon installs
-# VMware Tools and powers the VM off. Everything after that (updates, access account, sysprep,
-# template, tags) is done by Ansible through VMware Tools - no WinRM.
+# VMware Tools and powers the VM off. Everything after that (updates, access account, sealing,
+# template, tags) is done by Ansible through VMware Tools - no WinRM. No sysprep: VMware guest
+# customization runs it when VMs are deployed from the template.
 
 # --- vSphere (from vmware.yml; credentials from the environment) ----------------------------
 variable "vcenter_server" {

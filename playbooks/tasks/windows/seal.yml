@@ -1,24 +1,15 @@
 ---
-# Runs in the build VM (vmware_tools connection, PowerShell), last. Vars: image_dir
-- name: Answers for every VM's first boot (sysprep /unattend)
-  ansible.windows.win_template:
-    src: "{{ image_dir }}/unattend-sysprep.xml.j2"
-    dest: C:\Windows\System32\Sysprep\golden-unattend.xml
-
-# Windows setup runs SetupComplete.cmd once, as SYSTEM, at the end of every VM's first boot
-- name: First-boot script for VMs made from the image
-  ansible.windows.win_copy:
-    src: "{{ image_dir }}/files/{{ item }}"
-    dest: C:\Windows\Setup\Scripts\
-  loop: [SetupComplete.cmd, golden-firstboot.ps1]
-
+# Runs in the build VM (vmware_tools connection, PowerShell), last. No sysprep: VMware guest
+# customization runs sysprep when a VM is deployed from the template, and gives it its own SID,
+# name, address and Administrator password. A template that is already generalized would get
+# in its way.
+#
 # One command, because the build's login stops working halfway: it removes the build's fixed
-# address, the setup answers (with the build password), gives the built-in Administrator a
-# random password and disables it, clears the event logs and starts sysprep in the background. sysprep generalizes the
-# image (new SID and machine identity on first boot) and powers the VM off.
-- name: Seal and start sysprep
+# address and the setup answers (with the build password), gives the built-in Administrator a
+# random password nobody knows (customization sets its own), clears the event logs and shuts
+# the VM down.
+- name: Seal and shut down
   ansible.windows.win_shell: |
-    # VMs made from the template get their address from VMware guest customization
     $nic = Get-NetAdapter -Physical | Where-Object Status -eq 'Up' | Select-Object -First 1
     if ($nic) {
       Get-NetIPAddress -InterfaceIndex $nic.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -28,13 +19,11 @@
       Set-DnsClientServerAddress -InterfaceIndex $nic.ifIndex -ResetServerAddresses
     }
     Remove-Item -Force -ErrorAction SilentlyContinue C:\Windows\Panther\unattend.xml, C:\Windows\Panther\Unattend\*.xml
-    foreach ($log in (wevtutil el)) {
-      try { [System.Diagnostics.Eventing.Reader.EventLogSession]::GlobalSession.ClearLog($log) } catch { }
-    }
     Add-Type -AssemblyName System.Web
     $pw = ConvertTo-SecureString ([System.Web.Security.Membership]::GeneratePassword(32, 8)) -AsPlainText -Force
     Set-LocalUser -Name Administrator -Password $pw
-    Disable-LocalUser -Name Administrator
-    Start-Process -FilePath C:\Windows\System32\Sysprep\sysprep.exe `
-      -ArgumentList '/generalize', '/oobe', '/shutdown', '/quiet', '/unattend:C:\Windows\System32\Sysprep\golden-unattend.xml'
+    foreach ($log in (wevtutil el)) {
+      try { [System.Diagnostics.Eventing.Reader.EventLogSession]::GlobalSession.ClearLog($log) } catch { }
+    }
+    shutdown.exe /s /t 10 /c "Golden image sealed"
   changed_when: true

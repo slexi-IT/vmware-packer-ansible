@@ -1,0 +1,68 @@
+---
+# Runs in the build VM (vmware_tools connection), last: remove everything that must be unique per
+# machine and the build's own access, then power off. Vars: image_dns (list)
+- name: Empty machine-id (first boot generates a new one; NetworkManager's DHCP client ID depends on it)
+  ansible.builtin.copy:
+    content: ""
+    dest: /etc/machine-id
+    mode: "0444"
+
+- name: Remove a separate D-Bus machine-id
+  ansible.builtin.shell: |
+    if [ -e /var/lib/dbus/machine-id ] && [ ! -L /var/lib/dbus/machine-id ]; then rm -f /var/lib/dbus/machine-id; fi
+  changed_when: true
+
+- name: Remove SSH host keys (sshd-keygen creates new ones on first boot)
+  ansible.builtin.shell: rm -f /etc/ssh/ssh_host_*
+  changed_when: true
+
+- name: Remove the installer's network profiles
+  ansible.builtin.shell: rm -f /etc/NetworkManager/system-connections/*.nmconnection
+  changed_when: true
+
+# No interface-name, so it applies to whichever NIC a VM gets; no uuid, so NetworkManager
+# derives one from the file name
+- name: Generic DHCP profile with the image's DNS servers
+  ansible.builtin.copy:
+    dest: /etc/NetworkManager/system-connections/default.nmconnection
+    mode: "0600"
+    content: |
+      [connection]
+      id=default
+      type=ethernet
+      autoconnect=true
+
+      [ipv4]
+      method=auto
+      dns={{ image_dns | join(';') }};
+      ignore-auto-dns=true
+
+      [ipv6]
+      method=disabled
+
+- name: Remove the random seed, hostname and the build's leftovers
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/systemd/random-seed
+    - /etc/hostname
+    - /root/build-complete
+    # Anaconda's copies of the kickstart (the original holds the build root password)
+    - /root/anaconda-ks.cfg
+    - /root/original-ks.cfg
+    - /root/.bash_history
+
+- name: Clean package caches, temp files and logs
+  ansible.builtin.shell: |
+    set -e
+    dnf clean all
+    rm -rf /var/cache/dnf/* /tmp/* /var/tmp/*
+    find /var/log -type f -exec truncate -s 0 {} +
+  changed_when: true
+
+# Last step in one command: after root is locked, VMware Tools can no longer log in, and the
+# shutdown is only scheduled, so the command returns before the VM goes down
+- name: Lock root and power off
+  ansible.builtin.shell: passwd -l root && shutdown -P +1
+  changed_when: true

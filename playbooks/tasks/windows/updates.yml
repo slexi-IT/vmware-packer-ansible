@@ -1,0 +1,19 @@
+---
+# Runs in the build VM (vmware_tools connection, PowerShell). Installs every available update,
+# rebooting and searching again until nothing is left. -e build_windows_update=false skips it
+# for quick test builds.
+- name: Install Windows updates
+  ansible.windows.win_updates:
+    category_names: ["*"]
+    reject_list: ["Preview"]
+    reboot: true
+    reboot_timeout: 3600
+  register: updates
+  when: build_windows_update | default(true) | bool
+
+- name: Updates installed
+  ansible.builtin.debug:
+    msg: >-
+      {{ updates.installed_update_count | default(0) }} updates installed,
+      {{ updates.failed_update_count | default(0) }} failed
+  when: updates is not skipped

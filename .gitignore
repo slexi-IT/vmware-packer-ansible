@@ -1,0 +1,8 @@
+# Packer build output and caches (builds run in temporary directories, but keep local runs clean)
+output/
+packer_cache/
+*.qcow2
+serial.log
+packer.out
+packer.rc
+packer-debug.log

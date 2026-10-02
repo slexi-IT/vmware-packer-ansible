@@ -1,0 +1,31 @@
+---
+# Runs in the build VM (vmware_tools connection, PowerShell), last. Vars: image_dir
+- name: Answers for every VM's first boot (sysprep /unattend)
+  ansible.windows.win_template:
+    src: "{{ image_dir }}/unattend-sysprep.xml.j2"
+    dest: C:\Windows\System32\Sysprep\golden-unattend.xml
+
+# Windows setup runs SetupComplete.cmd once, as SYSTEM, at the end of every VM's first boot
+- name: First-boot script for VMs made from the image
+  ansible.windows.win_copy:
+    src: "{{ image_dir }}/files/{{ item }}"
+    dest: C:\Windows\Setup\Scripts\
+  loop: [SetupComplete.cmd, golden-firstboot.ps1]
+
+# One command, because the build's login stops working halfway: it removes the setup answers
+# (with the build password), gives the built-in Administrator a random password and disables
+# it, clears the event logs and starts sysprep in the background. sysprep generalizes the
+# image (new SID and machine identity on first boot) and powers the VM off.
+- name: Seal and start sysprep
+  ansible.windows.win_shell: |
+    Remove-Item -Force -ErrorAction SilentlyContinue C:\Windows\Panther\unattend.xml, C:\Windows\Panther\Unattend\*.xml
+    foreach ($log in (wevtutil el)) {
+      try { [System.Diagnostics.Eventing.Reader.EventLogSession]::GlobalSession.ClearLog($log) } catch { }
+    }
+    Add-Type -AssemblyName System.Web
+    $pw = ConvertTo-SecureString ([System.Web.Security.Membership]::GeneratePassword(32, 8)) -AsPlainText -Force
+    Set-LocalUser -Name Administrator -Password $pw
+    Disable-LocalUser -Name Administrator
+    Start-Process -FilePath C:\Windows\System32\Sysprep\sysprep.exe `
+      -ArgumentList '/generalize', '/oobe', '/shutdown', '/quiet', '/unattend:C:\Windows\System32\Sysprep\golden-unattend.xml'
+  changed_when: true

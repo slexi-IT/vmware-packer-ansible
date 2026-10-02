@@ -1,0 +1,10 @@
+---
+# Steps for rocky10-base, run by playbooks/build-image.yml inside the build VM through VMware
+# Tools. The shared Linux steps live in playbooks/tasks/linux/.
+- name: Check the install finished
+  ansible.builtin.include_tasks: "{{ tasks_dir }}/linux/check_install.yml"
+
+# Image-specific steps go here (packages from the ISO, hardening, ...)
+
+- name: Seal the image and power off
+  ansible.builtin.include_tasks: "{{ tasks_dir }}/linux/seal.yml"

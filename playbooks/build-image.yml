@@ -1,0 +1,263 @@
+---
+# Build a golden image on vSphere. Handles every image, Linux and Windows; the OS-specific parts
+# come from images/<os>/<image>/.
+#
+#   1. Packer installs from the ISO into the build VM build-<image>-<version> and powers it off.
+#   2. Ansible works inside the build VM through VMware Tools (community.vmware.vmware_tools
+#      connection - no SSH, no WinRM): the image's configure.yml, ending with sealing and
+#      power-off.
+#   3. The build VM becomes the template <image>-<version>, tagged "testing".
+#
+# Needs AWX's VMware vCenter credential (VMWARE_HOST / VMWARE_USER / VMWARE_PASSWORD), which the
+# vmware.vmware modules, Packer and the vmware_tools connection all read. The VMware Tools
+# connection also talks to the ESXi host running the VM, so that must be reachable on 443.
+
+- name: Install with Packer
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    packer_poll_seconds: 15
+    packer_debug_tail_lines: 60
+
+  vars_files:
+    - ../vmware.yml
+
+  environment:
+    PACKER_PLUGIN_PATH: /usr/share/packer/plugins
+    CHECKPOINT_DISABLE: "1"
+    VMWARE_VALIDATE_CERTS: "{{ (not (vsphere_insecure | bool)) | string | lower }}"
+
+  tasks:
+    - name: Load the image (images/<os>/<image>/image.yml)
+      ansible.builtin.include_tasks: tasks/load_image.yml
+
+    - name: Name this build
+      ansible.builtin.set_fact:
+        # UTC, so versions sort and compare the same everywhere
+        image_version: "{{ now(utc=true).strftime('%Y.%m.%d-%H%M') }}"
+        # Unique per run, so a marker from another build can never count
+        build_marker: "BUILD-COMPLETE {{ image }} {{ lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters', 'digits'], length=16) }}"
+        # Ansible's login through VMware Tools during the build; the seal step locks it again
+        build_password: "{{ lookup('ansible.builtin.password', '/dev/null', chars=['ascii_letters', 'digits'], length=24) }}Aa1"
+
+    - name: Name the template and the build VM
+      ansible.builtin.set_fact:
+        template_name: "{{ image_name }}-{{ image_version }}"
+        build_vm: "build-{{ image_name }}-{{ image_version }}"
+
+    - name: Create a work directory for this build
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: packer-
+      register: workdir
+
+    - name: Record build paths
+      ansible.builtin.set_fact:
+        packer_started: "{{ now(utc=true).timestamp() | int }}"
+        packer_out: "{{ workdir.path }}/packer.out"
+        packer_debug_log: "{{ workdir.path }}/packer-debug.log"
+        packer_rc_file: "{{ workdir.path }}/packer.rc"
+        # No local disk on vSphere; the progress loop just shows Packer's messages
+        packer_disk: /nonexistent
+        packer_offset: 0
+
+    - name: Assemble the Packer variables
+      ansible.builtin.set_fact:
+        packer_args: >-
+          {%- set v = {'iso_path': image_iso_path, 'iso_checksum': image_iso_checksum,
+                       'vm_name': build_vm,
+                       'vsphere_datacenter': vsphere_datacenter, 'vsphere_cluster': vsphere_cluster,
+                       'vsphere_datastore': vsphere_datastore, 'vsphere_network': vsphere_network,
+                       'vsphere_folder': vsphere_work_folder,
+                       'vsphere_insecure': vsphere_insecure | string | lower} -%}
+          {%- for k, val in (image_packer_vars | default({})).items() -%}
+          {%- set _ = v.update({k: val | replace('{workdir}', workdir.path)}) -%}
+          {%- endfor -%}
+          {%- for k, val in v.items() %}-var {{ k }}={{ val | quote }} {% endfor -%}
+          {{ image_name }}.pkr.hcl
+
+    - name: Render the image's install answers
+      ansible.builtin.template:
+        src: "{{ image_dir }}/{{ item.src }}"
+        dest: "{{ workdir.path }}/{{ item.dest }}"
+        mode: "0600"
+      loop: "{{ image_templates | default([]) }}"
+
+    - name: Validate the Packer template
+      ansible.builtin.command:
+        cmd: packer validate {{ packer_args }}
+        chdir: "{{ image_dir }}"
+      changed_when: false
+
+    # Packer runs in the background so its output can be shown while it works.
+    # -machine-readable gives timestamped lines that files/packer_log.py turns back into text;
+    # PACKER_LOG writes the detailed debug log that is shown if the build fails.
+    - name: Start Packer (unattended install, ends with the build VM powered off)
+      ansible.builtin.shell:
+        cmd: >-
+          packer build -machine-readable {{ packer_args }} > {{ packer_out }} 2>&1;
+          echo $? > {{ packer_rc_file }}
+        chdir: "{{ image_dir }}"
+      environment:
+        PACKER_LOG: "1"
+        PACKER_LOG_PATH: "{{ packer_debug_log }}"
+      async: 7200
+      poll: 0
+      changed_when: true
+
+    - name: Follow Packer output
+      ansible.builtin.include_tasks: tasks/packer_wait.yml
+
+    - name: Collect Packer results
+      ansible.builtin.command: >-
+        python3 {{ playbook_dir }}/files/packer_log.py summary
+        {{ packer_out }} {{ packer_debug_log }} {{ packer_debug_tail_lines }}
+      register: packer_summary_raw
+      changed_when: false
+
+    - name: Summarise the Packer run
+      ansible.builtin.set_fact:
+        packer_rc: "{{ lookup('file', packer_rc_file) | int }}"
+        packer_summary: "{{ packer_summary_raw.stdout | from_json }}"
+
+    - name: Show the Packer debug log tail
+      ansible.builtin.debug:
+        var: packer_summary.debug_tail
+      when: packer_rc | int != 0
+
+    - name: Stop if Packer failed
+      ansible.builtin.fail:
+        msg: "Packer exited with {{ packer_rc }}: {{ packer_summary.errors | join(' | ') | default('see the debug log above', true) }}"
+      when: packer_rc | int != 0
+
+    # --- hand over to Ansible inside the guest ------------------------------------------------
+
+    - name: Power on {{ build_vm }}
+      vmware.vmware.vm_powerstate:
+        datacenter: "{{ vsphere_datacenter }}"
+        name: "{{ build_vm }}"
+        folder: "{{ vsphere_datacenter }}/vm/{{ vsphere_work_folder }}"
+        state: powered-on
+
+    - name: Wait for VMware Tools in {{ build_vm }}
+      vmware.vmware.vm_info:
+        datacenter: "{{ vsphere_datacenter }}"
+        name: "{{ build_vm }}"
+        schema: vsphere
+        properties: [guest.toolsRunningStatus, guest.guestOperationsReady]
+      register: tools
+      retries: 60
+      delay: 10
+      until: >-
+        (tools.vms[0].guest.toolsRunningStatus | default('')) == 'guestToolsRunning'
+        and (tools.vms[0].guest.guestOperationsReady | default(false))
+
+    - name: Add the build VM as a host reached through VMware Tools
+      ansible.builtin.add_host:
+        name: build_vm
+        ansible_connection: community.vmware.vmware_tools
+        ansible_vmware_guest_path: "{{ vsphere_datacenter }}/vm/{{ vsphere_work_folder }}/{{ build_vm }}"
+        ansible_vmware_validate_certs: "{{ not (vsphere_insecure | bool) }}"
+        ansible_vmware_tools_user: "{{ image_guest_user }}"
+        ansible_vmware_tools_password: "{{ build_password }}"
+        ansible_shell_type: "{{ image_guest_shell }}"
+        ansible_python_interpreter: "{{ image_guest_python | default(omit) }}"
+        # What the image's configure steps need
+        image: "{{ image }}"
+        image_dir: "{{ image_dir }}"
+        image_settings_file: "{{ image_settings[0] }}"
+        tasks_dir: "{{ playbook_dir }}/tasks"
+        build_marker: "{{ build_marker }}"
+        build_windows_update: "{{ build_windows_update | default(true) }}"
+
+- name: Configure and seal inside the build VM (VMware Tools)
+  hosts: build_vm
+  gather_facts: false
+
+  tasks:
+    - name: Load the image settings
+      ansible.builtin.include_vars:
+        file: "{{ image_settings_file }}"
+
+    - name: Run the image's configure steps
+      ansible.builtin.include_tasks: "{{ image_dir }}/{{ image_configure_tasks }}"
+
+    - name: Mark the configure steps as done
+      ansible.builtin.set_fact:
+        configure_done: true
+
+- name: Publish the template
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../vmware.yml
+
+  environment:
+    VMWARE_VALIDATE_CERTS: "{{ (not (vsphere_insecure | bool)) | string | lower }}"
+
+  tasks:
+    # If a step inside the VM failed, there is no power-off to wait for; the VM stays for a look
+    - name: Stop if the configure steps did not finish
+      ansible.builtin.assert:
+        that: hostvars['build_vm'].configure_done | default(false)
+        fail_msg: >-
+          Configuring {{ build_vm }} failed (see above). The VM is left in
+          {{ vsphere_work_folder }} for inspection; delete it when done.
+
+    # Sealing ends with the guest powering itself off (sysprep can take a while)
+    - name: Wait for {{ build_vm }} to power off
+      vmware.vmware.vm_info:
+        datacenter: "{{ vsphere_datacenter }}"
+        name: "{{ build_vm }}"
+      register: build_state
+      retries: 120
+      delay: 15
+      until: (build_state.vms[0].hw_power_status | default('')) == 'poweredOff'
+
+    - name: Create the template {{ template_name }}
+      vmware.vmware.folder_template_from_vm:
+        datacenter: "{{ vsphere_datacenter }}"
+        vm_name: "{{ build_vm }}"
+        template_name: "{{ template_name }}"
+        template_folder: "{{ vsphere_datacenter }}/vm/{{ vsphere_template_folder }}"
+        datastore: "{{ vsphere_datastore }}"
+        wait_for_template: true
+
+    - name: Delete the build VM
+      vmware.vmware.vm:
+        datacenter: "{{ vsphere_datacenter }}"
+        name: "{{ build_vm }}"
+        folder: "{{ vsphere_datacenter }}/vm/{{ vsphere_work_folder }}"
+        state: absent
+
+    - name: Look up the image's templates
+      ansible.builtin.include_tasks: tasks/image_templates.yml
+
+    - name: Make this build the "testing" version
+      ansible.builtin.include_tasks: tasks/set_channel.yml
+      vars:
+        channel: testing
+        channel_template: "{{ template_name }}"
+
+    - name: Build summary
+      ansible.builtin.debug:
+        msg:
+          - "template:   {{ vsphere_template_folder }}/{{ template_name }} (tagged testing)"
+          - "build time: {{ (((now(utc=true).timestamp() | int) - (packer_started | int)) / 60) | round(1) }} min"
+          - "git:        {{ awx_project_revision | default(tower_project_revision) | default('unknown') }}"
+
+    - name: Publish the result on the AWX job
+      ansible.builtin.set_stats:
+        data:
+          image: "{{ image_name }}"
+          image_version: "{{ image_version }}"
+          template: "{{ template_name }}"
+
+    - name: Remove the work directory
+      ansible.builtin.file:
+        path: "{{ workdir.path }}"
+        state: absent

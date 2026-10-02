@@ -1,0 +1,42 @@
+---
+# Settings for the rocky10-base golden image on vSphere, read by playbooks/build-image.yml
+# (site settings such as datastore and folders come from vmware.yml)
+
+image_name: rocky10-base
+# Folder images/linux/ ; also the AWX label of this image's job templates
+image_os: linux
+image_description: Rocky Linux 10.2 minimal, offline install from the ISO, open-vm-tools, sealed
+
+# Install media on a datastore
+image_iso_path: "[{{ vsphere_iso_datastore }}] {{ vsphere_iso_folder }}/Rocky-10.2-x86_64-minimal.iso"
+image_iso_checksum: sha256:aac6ac3ce781b91a91ce78463405f66c611a5dca4b3840c79e5e01d97302f6c8
+# Volume ID of that ISO (xorriso -indev <iso> -pvd_info); the kickstart mounts it by this label
+image_iso_volume_id: Rocky-10-2-x86_64-dvd
+
+image_timezone: Europe/Zurich
+image_dns: [1.1.1.1]
+
+# Access account baked into the image (SSH key only, passwordless sudo)
+image_admin_user: slexi
+image_admin_ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJTpbiuPOb459X11qmf9RnVqE1RhKv1XeMRDeHIdZqr3"
+
+# --- how build-image.yml drives this image -------------------------------------------------
+image_templates:
+  - {src: ks.cfg.j2, dest: ks.cfg}
+# Extra Packer variables; {workdir} is replaced with the build's work directory
+image_packer_vars:
+  ks_file: "{workdir}/ks.cfg"
+# Ansible's login through VMware Tools after the install (root with the per-build password)
+image_guest_user: root
+image_guest_shell: sh
+image_guest_python: /usr/bin/python3
+# Steps Ansible runs in the build VM
+image_configure_tasks: configure.yml
+
+# --- what test-image.yml expects from a VM deployed from this image -------------------------
+image_test:
+  # VMware Tools' name for the guest OS
+  os: Rocky Linux
+  hostname: '^localhost(\.localdomain)?$'
+  # seconds until VMware Tools report an address
+  boot_timeout: 300

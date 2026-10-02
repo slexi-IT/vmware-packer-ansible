@@ -1,0 +1,13 @@
+---
+# Runs in the build VM (vmware_tools connection). The kickstart writes this run's marker only if
+# every %post step succeeded; a VM that powered off for any other reason has none.
+- name: Read the kickstart's completion marker
+  ansible.builtin.slurp:
+    src: /root/build-complete
+  register: marker
+  failed_when: false
+
+- name: Stop unless the install finished
+  ansible.builtin.assert:
+    that: (marker.content | default('') | b64decode | trim) == build_marker
+    fail_msg: "The install did not finish: no completion marker in /root/build-complete"

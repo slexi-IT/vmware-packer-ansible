@@ -1,0 +1,63 @@
+---
+# Promote a golden image (any image, Linux or Windows): move the "prod" tag to the template tagged "testing", then delete old
+# templates. Kept: the newest vsphere_keep_versions templates plus the testing / prod ones.
+- name: Promote a golden image
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - ../vmware.yml
+
+  environment:
+    VMWARE_VALIDATE_CERTS: "{{ (not (vsphere_insecure | bool)) | string | lower }}"
+
+  tasks:
+    - name: Load the image (images/<os>/<image>/image.yml)
+      ansible.builtin.include_tasks: tasks/load_image.yml
+
+    - name: Look up the image's templates
+      ansible.builtin.include_tasks: tasks/image_templates.yml
+
+    - name: Find the tested and the current prod template
+      ansible.builtin.set_fact:
+        new_prod: "{{ (image_templates | selectattr('channels', 'contains', 'testing') | first | default({})).name | default('') }}"
+        old_prod: "{{ (image_templates | selectattr('channels', 'contains', 'prod') | first | default({})).name | default('none') }}"
+
+    - name: Stop if there is nothing to promote
+      ansible.builtin.assert:
+        that: new_prod | length > 0
+        fail_msg: "No {{ image }} template is tagged 'testing'; build the image first"
+
+    - name: Point "prod" at the tested template
+      ansible.builtin.include_tasks: tasks/set_channel.yml
+      vars:
+        channel: prod
+        channel_template: "{{ new_prod }}"
+
+    - name: Decide which templates to delete
+      ansible.builtin.set_fact:
+        drop: >-
+          {{ (image_templates | map(attribute='name') | list)[:-(vsphere_keep_versions | int)]
+             | difference([new_prod]) }}
+
+    - name: Delete old templates
+      vmware.vmware.vm:
+        name: "{{ item }}"
+        folder: "{{ vsphere_datacenter }}/vm/{{ vsphere_template_folder }}"
+        datacenter: "{{ vsphere_datacenter }}"
+        state: absent
+      loop: "{{ drop }}"
+
+    - name: Promotion summary
+      ansible.builtin.debug:
+        msg:
+          - "prod:     {{ old_prod }} -> {{ new_prod }}"
+          - "deleted:  {{ drop | join(', ') | default('nothing', true) }}"
+
+    - name: Publish the result on the AWX job
+      ansible.builtin.set_stats:
+        data:
+          image: "{{ image }}"
+          prod_template: "{{ new_prod }}"
+          previous_prod_template: "{{ old_prod }}"

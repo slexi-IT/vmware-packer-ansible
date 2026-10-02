@@ -1,0 +1,47 @@
+---
+# Settings for the windows2025-std-desktop golden image on vSphere, read by
+# playbooks/build-image.yml (site settings come from vmware.yml)
+
+image_name: windows2025-std-desktop
+# Folder images/windows/ ; also the AWX label of this image's job templates
+image_os: windows
+image_description: Windows Server 2025 Standard (Desktop Experience) evaluation, VMware Tools, updated, sysprepped
+
+# Install media on a datastore
+image_iso_path: "[{{ vsphere_iso_datastore }}] {{ vsphere_iso_folder }}/Windows-Server-2025-eval-26100.1742-x64-en-us.iso"
+# Microsoft publishes no checksum for the evaluation ISO: SHA256 of the download of 2026-10-02
+image_iso_checksum: sha256:d0ef4502e350e3c6c53c15b1b3020d38a5ded011bf04998e950720ac8579b23d
+# Image inside sources/install.wim: 2 = SERVERSTANDARD (Desktop Experience); 1 Core, 3/4 Datacenter
+image_wim_index: 2
+
+image_timezone: W. Europe Standard Time
+image_locale: en-US
+image_keyboard: "0409:00000409"
+
+# Access account baked into the image: local administrator, random unknown password,
+# SSH key login through the built-in OpenSSH server
+image_admin_user: slexi
+image_admin_ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJTpbiuPOb459X11qmf9RnVqE1RhKv1XeMRDeHIdZqr3"
+
+# --- how build-image.yml drives this image -------------------------------------------------
+# Rendered into the build's work directory (Jinja2, with all variables above)
+image_templates:
+  - {src: autounattend.xml.j2, dest: autounattend.xml}
+# Extra Packer variables; {workdir} is replaced with the build's work directory
+image_packer_vars:
+  autounattend_file: "{workdir}/autounattend.xml"
+  tools_iso_path: "{{ vsphere_tools_windows_iso }}"
+# Ansible's login through VMware Tools after the install
+image_guest_user: Administrator
+image_guest_shell: powershell
+# Steps Ansible runs in the build VM; -e build_windows_update=false skips Windows Update
+image_configure_tasks: configure.yml
+
+# --- what test-image.yml expects from a VM deployed from this image -------------------------
+image_test:
+  # VMware Tools' name for the guest OS
+  os: Windows Server 2025
+  # sysprep's specialize pass gives every VM a random WIN-... name
+  hostname: '^WIN-[A-Z0-9]+$'
+  # specialize and OOBE reboot the VM before VMware Tools report an address
+  boot_timeout: 900

@@ -1,0 +1,14 @@
+---
+# Runs in the build VM (vmware_tools connection, PowerShell): shrink the image
+- name: Remove superseded update payloads
+  ansible.windows.win_command: Dism.exe /Online /Cleanup-Image /StartComponentCleanup /ResetBase /Quiet
+  register: dism
+  changed_when: true
+  # 3010 = success, reboot required
+  failed_when: dism.rc not in [0, 3010]
+
+- name: Remove temporary files and downloaded updates
+  ansible.windows.win_shell: |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue `
+      C:\Windows\Temp\*, $env:TEMP\*, C:\Windows\SoftwareDistribution\Download\*
+  changed_when: true

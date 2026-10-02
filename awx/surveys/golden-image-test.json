@@ -1,0 +1,15 @@
+{
+  "name": "Golden image boot test",
+  "description": "",
+  "spec": [
+    {
+      "question_name": "Channel",
+      "question_description": "Which published version to boot: the latest build (testing) or the released one (prod)",
+      "variable": "channel",
+      "type": "multiplechoice",
+      "choices": "testing\nprod",
+      "default": "testing",
+      "required": true
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+---
+# One progress step while Packer runs in the background. Includes itself until Packer exits.
+- name: Packer progress
+  ansible.builtin.command: >-
+    python3 {{ playbook_dir }}/files/packer_log.py tail
+    {{ packer_out }} {{ packer_offset }} {{ packer_rc_file }}
+    {{ packer_disk }} {{ packer_poll_seconds }}
+  register: packer_tail
+  changed_when: false
+
+- name: Record progress
+  ansible.builtin.set_fact:
+    packer_offset: "{{ (packer_tail.stdout | from_json).offset }}"
+    packer_done: "{{ (packer_tail.stdout | from_json).rc is not none }}"
+    packer_progress: "{{ packer_tail.stdout | from_json }}"
+
+- name: Packer output
+  ansible.builtin.debug:
+    msg: >-
+      {{ packer_progress.lines
+         + (['disk written so far: ' ~ packer_progress.disk] if packer_progress.disk_bytes | int > 0 else []) }}
+  when: packer_progress.lines | length > 0 or packer_progress.disk_bytes | int > 0
+
+- name: Keep waiting for Packer
+  ansible.builtin.include_tasks: packer_wait.yml
+  when: not packer_done | bool

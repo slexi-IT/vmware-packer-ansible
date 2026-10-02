@@ -1,0 +1,30 @@
+---
+# vSphere site settings for all image builds on this branch. Fill in once a vCenter exists.
+# Credentials are not here: AWX's VMware vCenter credential provides VMWARE_HOST,
+# VMWARE_USER and VMWARE_PASSWORD to the job; the vmware.vmware modules read them from there.
+
+vsphere_datacenter: REPLACE_DATACENTER
+vsphere_cluster: REPLACE_CLUSTER
+vsphere_datastore: REPLACE_DATASTORE
+vsphere_network: REPLACE_PORTGROUP
+# Self-signed vCenter certificate in the lab; set to false with a trusted certificate
+vsphere_insecure: true
+
+# Golden images are vSphere VM templates named <image>-<version> in this folder
+vsphere_template_folder: Golden images
+# Build VMs (while Packer works) and boot-test VMs
+vsphere_work_folder: Golden images/Work
+
+# Channels are vSphere tags in this category, attached to templates: the template of an image
+# that carries "prod" is the one to deploy; "testing" marks the newest successful build
+vsphere_channel_category: golden-channel
+vsphere_channels: [testing, prod]
+
+# Install media on a datastore
+vsphere_iso_datastore: REPLACE_DATASTORE
+vsphere_iso_folder: iso
+# VMware Tools for Windows, shipped with ESXi
+vsphere_tools_windows_iso: "[] /vmimages/tools-isoimages/windows.iso"
+
+# How many templates per image to keep (besides the ones tagged testing / prod)
+vsphere_keep_versions: 3

@@ -1,0 +1,215 @@
+---
+# Apply awx/config.yml to AWX with the awx.awx collection.
+# In AWX the "AWX API (config as code)" credential provides CONTROLLER_HOST and the token;
+# from a shell set CONTROLLER_HOST, CONTROLLER_USERNAME and CONTROLLER_PASSWORD instead.
+# Run with --check --diff first to see what would change.
+- name: Apply AWX configuration from Git
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - config.yml
+
+  tasks:
+    - name: Execution environments
+      awx.awx.execution_environment:
+        name: "{{ item.name }}"
+        image: "{{ item.image }}"
+        pull: "{{ item.pull }}"
+        description: "{{ item.description | default(omit) }}"
+        organization: "{{ awx_organization }}"
+      loop: "{{ awx_execution_environments }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # Declared without inputs: existing secrets are never overwritten, and the repo holds none
+    - name: Credentials (metadata only)
+      awx.awx.credential:
+        name: "{{ item.name }}"
+        credential_type: "{{ item.credential_type }}"
+        description: "{{ item.description | default(omit) }}"
+        organization: "{{ awx_organization }}"
+        update_secrets: false
+      loop: "{{ awx_credentials }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Container groups
+      awx.awx.instance_group:
+        name: "{{ item.name }}"
+        is_container_group: true
+        pod_spec_override: "{{ lookup('ansible.builtin.file', item.pod_spec_file) }}"
+      loop: "{{ awx_instance_groups }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # A project renamed in config.yml keeps its history: rename the old one instead of creating a new one
+    - name: Rename projects
+      awx.awx.project:
+        name: "{{ item.previous_name }}"
+        new_name: "{{ item.name }}"
+        organization: "{{ awx_organization }}"
+        update_project: false
+        wait: false
+      loop: "{{ awx_projects | selectattr('previous_name', 'defined') | list }}"
+      loop_control:
+        label: "{{ item.previous_name }} -> {{ item.name }}"
+      when: >-
+        query('awx.awx.controller_api', 'projects', query_params={'name': item.previous_name}) | length > 0
+
+    - name: Projects
+      awx.awx.project:
+        name: "{{ item.name }}"
+        description: "{{ item.description | default(omit) }}"
+        organization: "{{ awx_organization }}"
+        scm_type: "{{ item.scm_type }}"
+        scm_url: "{{ item.scm_url }}"
+        scm_branch: "{{ item.scm_branch }}"
+        scm_clean: "{{ item.scm_clean }}"
+        scm_update_on_launch: "{{ item.scm_update_on_launch }}"
+        scm_update_cache_timeout: "{{ item.scm_update_cache_timeout }}"
+        credential: "{{ item.credential }}"
+        default_environment: "{{ item.default_environment }}"
+        # Don't sync the project as part of applying config; jobs update it on launch anyway
+        update_project: false
+        wait: false
+      loop: "{{ awx_projects }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Job templates
+      awx.awx.job_template:
+        name: "{{ item.name }}"
+        description: "{{ item.description | default(omit) }}"
+        organization: "{{ awx_organization }}"
+        project: "{{ item.project }}"
+        playbook: "{{ item.playbook }}"
+        inventory: "{{ item.inventory }}"
+        execution_environment: "{{ item.execution_environment }}"
+        instance_groups: "{{ item.instance_groups | default(omit) }}"
+        credentials: "{{ item.credentials | default(omit) }}"
+        ask_variables_on_launch: false
+        survey_enabled: "{{ item.survey_file is defined }}"
+        survey_spec: "{{ lookup('ansible.builtin.file', item.survey_file) | from_json if item.survey_file is defined else omit }}"
+      loop: "{{ awx_job_templates }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Retired job templates
+      awx.awx.job_template:
+        name: "{{ item }}"
+        organization: "{{ awx_organization }}"
+        state: absent
+      loop: "{{ awx_retired_job_templates | default([]) }}"
+
+    # --- one set of objects per image ---------------------------------------------------------
+
+    - name: Labels
+      awx.awx.label:
+        name: "{{ item }}"
+        organization: "{{ awx_organization }}"
+      loop: "{{ (['golden-image'] + awx_extra_labels | default([]) + awx_images | map(attribute='os') | list) | unique }}"
+
+    - name: Teams
+      awx.awx.team:
+        name: "{{ item }}"
+        organization: "{{ awx_organization }}"
+      loop: "{{ awx_images | map(attribute='team') | unique }}"
+
+    - name: Image job templates (build, boot test, promote)
+      awx.awx.job_template:
+        name: "{{ awx_name_prefix | default('') }}{{ item.0.image }}: {{ item.1.step }}"
+        description: "{{ item.1.description }} {{ item.0.image }}"
+        organization: "{{ awx_organization }}"
+        project: "{{ awx_image_job_defaults.project }}"
+        playbook: "{{ item.1.playbook }}"
+        inventory: "{{ awx_image_job_defaults.inventory }}"
+        execution_environment: "{{ awx_image_job_defaults.execution_environment }}"
+        instance_groups: "{{ awx_image_job_defaults.instance_groups | default(omit) }}"
+        credentials: "{{ awx_image_job_defaults.credentials | default(omit) }}"
+        # The image is fixed per template; only the boot test asks which channel to boot
+        extra_vars: {image: "{{ item.0.image }}"}
+        ask_variables_on_launch: false
+        survey_enabled: "{{ item.1.survey is defined }}"
+        survey_spec: "{{ lookup('ansible.builtin.file', item.1.survey) | from_json if item.1.survey is defined else omit }}"
+        labels: "{{ ['golden-image', item.0.os] + awx_extra_labels | default([]) }}"
+      loop: "{{ awx_images | product(image_steps) | list }}"
+      loop_control:
+        label: "{{ awx_name_prefix | default('') }}{{ item.0.image }}: {{ item.1.step }}"
+      vars:
+        image_steps:
+          - {step: build, playbook: playbooks/build-image.yml, description: "Packer build, published as the testing version of"}
+          - {step: boot test, playbook: playbooks/test-image.yml, survey: surveys/golden-image-test.json, description: "Boots a throwaway VM from a published version of"}
+          - {step: promote, playbook: playbooks/promote-image.yml, description: "Releases the testing version as prod and deletes old versions of"}
+
+    - name: Image pipelines (build -> boot test -> approval -> promote)
+      awx.awx.workflow_job_template:
+        name: "{{ awx_name_prefix | default('') }}{{ item.image }}: pipeline"
+        description: "Build, boot-test, approve and release {{ item.image }}"
+        organization: "{{ awx_organization }}"
+        labels: "{{ ['golden-image', item.os] + awx_extra_labels | default([]) }}"
+        workflow_nodes:
+          - identifier: build
+            unified_job_template:
+              name: "{{ awx_name_prefix | default('') }}{{ item.image }}: build"
+              type: job_template
+              organization: {name: "{{ awx_organization }}"}
+            related:
+              success_nodes: [{identifier: test}]
+          - identifier: test
+            unified_job_template:
+              name: "{{ awx_name_prefix | default('') }}{{ item.image }}: boot test"
+              type: job_template
+              organization: {name: "{{ awx_organization }}"}
+            extra_data: {channel: testing}
+            related:
+              success_nodes: [{identifier: approve}]
+          - identifier: approve
+            unified_job_template:
+              name: "Release {{ awx_name_prefix | default('') }}{{ item.image }} to prod?"
+              description: The new version built and passed its boot test; approve to make it the prod version
+              timeout: "{{ awx_approval_timeout }}"
+              type: workflow_approval
+            related:
+              success_nodes: [{identifier: promote}]
+          - identifier: promote
+            unified_job_template:
+              name: "{{ awx_name_prefix | default('') }}{{ item.image }}: promote"
+              type: job_template
+              organization: {name: "{{ awx_organization }}"}
+      loop: "{{ awx_images }}"
+      loop_control:
+        label: "{{ item.image }}"
+
+    - name: Image schedules
+      awx.awx.schedule:
+        name: "{{ awx_name_prefix | default('') }}{{ item.image }}: monthly"
+        description: "{{ item.schedule_description }}"
+        unified_job_template: "{{ awx_name_prefix | default('') }}{{ item.image }}: pipeline"
+        rrule: "{{ item.schedule }}"
+        enabled: true
+      loop: "{{ awx_images }}"
+      loop_control:
+        label: "{{ item.image }}"
+
+    # Each team may run its own images' templates and pipeline and approve its releases
+    - name: Team permissions on job templates
+      awx.awx.role:
+        team: "{{ item.team }}"
+        role: execute
+        job_templates:
+          - "{{ awx_name_prefix | default('') }}{{ item.image }}: build"
+          - "{{ awx_name_prefix | default('') }}{{ item.image }}: boot test"
+          - "{{ awx_name_prefix | default('') }}{{ item.image }}: promote"
+      loop: "{{ awx_images }}"
+      loop_control:
+        label: "{{ item.team }} -> {{ item.image }}"
+
+    - name: Team permissions on pipelines
+      awx.awx.role:
+        team: "{{ item.0.team }}"
+        role: "{{ item.1 }}"
+        workflows: ["{{ awx_name_prefix | default('') }}{{ item.0.image }}: pipeline"]
+      loop: "{{ awx_images | product(['execute', 'approval']) | list }}"
+      loop_control:
+        label: "{{ item.0.team }} -> {{ awx_name_prefix | default('') }}{{ item.0.image }}: pipeline ({{ item.1 }})"

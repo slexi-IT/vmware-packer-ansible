@@ -1,0 +1,24 @@
+---
+# Move a channel tag to one template of an image. Needs image_templates.yml first.
+# Vars: channel (testing / prod), channel_template (template name)
+- name: Remove "{{ channel }}" from the image's other templates
+  vmware.vmware.tag_associations:
+    state: absent
+    object_type: VirtualMachine
+    object_moid: "{{ item.moid }}"
+    tags:
+      - name: "{{ channel }}"
+        category_name: "{{ vsphere_channel_category }}"
+  loop: "{{ image_templates | rejectattr('name', 'equalto', channel_template)
+            | selectattr('channels', 'contains', channel) | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Tag {{ channel_template }} as "{{ channel }}"
+  vmware.vmware.tag_associations:
+    state: present
+    object_type: VirtualMachine
+    object_moid: "{{ (image_templates | selectattr('name', 'equalto', channel_template) | first).moid }}"
+    tags:
+      - name: "{{ channel }}"
+        category_name: "{{ vsphere_channel_category }}"

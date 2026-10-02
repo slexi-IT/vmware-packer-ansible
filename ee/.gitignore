@@ -1,0 +1,5 @@
+# ansible-builder output, local venv and exported images
+context/
+.venv/
+*.tar
+*.log

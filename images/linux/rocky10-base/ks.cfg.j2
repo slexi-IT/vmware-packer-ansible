@@ -1,0 +1,67 @@
+# Rocky Linux 10 golden image - unattended install (vSphere), rendered by playbooks/build-image.yml
+# Generic on purpose: no hostname, no fixed address. Everything per-VM is set when a VM is
+# created from the image, not here.
+cmdline
+# Offline build: every package comes from the ISO, no network repositories
+cdrom
+lang en_US.UTF-8
+keyboard us
+timezone {{ image_timezone }} --utc
+network --bootproto=dhcp --device=link --activate --hostname=localhost.localdomain
+
+# Per-build root password, only for Ansible's login through VMware Tools (guest operations).
+# The seal step locks root again and deletes the kickstart copies Anaconda keeps in /root.
+rootpw --plaintext {{ build_password }}
+# Access account for VMs made from this image: SSH key only, password locked
+user --name={{ image_admin_user }} --groups=wheel --lock
+sshkey --username={{ image_admin_user }} "{{ image_admin_ssh_key }}"
+
+selinux --enforcing
+firewall --enabled --service=ssh
+firstboot --disable
+
+# PVSCSI disk
+ignoredisk --only-use=sda
+zerombr
+clearpart --all --initlabel --drives=sda
+autopart --type=lvm --nohome
+bootloader --timeout=1
+
+%packages
+@^minimal-environment
+%end
+
+%post --interpreter=/bin/bash --erroronfail --log=/root/ks-post.log
+# Stop at the first failing command; --erroronfail alone only checks the last one
+set -euxo pipefail
+echo '{{ image_admin_user }} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/{{ image_admin_user }}
+chmod 0440 /etc/sudoers.d/{{ image_admin_user }}
+%end
+
+# Use the OEMDRV CD from inside the new system: install the RPMs shipped on it
+# (open-vm-tools is not on the minimal ISO) and run init.sh, all without network access
+%post --nochroot --interpreter=/bin/bash --erroronfail --log=/mnt/sysroot/root/ks-init.log
+set -euxo pipefail
+mkdir -p /mnt/sysroot/mnt/oemdrv /mnt/sysroot/mnt/iso
+mount -o ro /dev/disk/by-label/OEMDRV /mnt/sysroot/mnt/oemdrv
+# The install ISO is still in the drive; dnf takes the RPMs' dependencies from it
+mount -o ro "/dev/disk/by-label/{{ image_iso_volume_id }}" /mnt/sysroot/mnt/iso
+# The * must be expanded inside the new system, where the CD is at /mnt/oemdrv
+chroot /mnt/sysroot bash -c "dnf -y --disablerepo='*' \
+  --repofrompath=iso,file:///mnt/iso/Minimal --setopt=iso.gpgcheck=1 \
+  --setopt=iso.gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-Rocky-10 \
+  --setopt=install_weak_deps=False install /mnt/oemdrv/*.rpm"
+chroot /mnt/sysroot systemctl enable vmtoolsd
+chroot /mnt/sysroot bash /mnt/oemdrv/init.sh
+umount /mnt/sysroot/mnt/oemdrv /mnt/sysroot/mnt/iso
+rmdir /mnt/sysroot/mnt/oemdrv /mnt/sysroot/mnt/iso
+%end
+
+# Completion marker: Ansible checks it through VMware Tools before configuring the VM, since a
+# VM that powers off for any other reason (crash, Anaconda halting on an error) looks the same.
+%post --interpreter=/bin/bash --erroronfail --log=/root/ks-final.log
+set -euxo pipefail
+echo "{{ build_marker }}" > /root/build-complete
+%end
+
+poweroff

@@ -1,0 +1,38 @@
+---
+# The templates of one image and their channel tags.
+# Sets image_templates: [{name, moid, channels: [...]}], sorted oldest first.
+- name: Make sure the channel tag category and tags exist
+  vmware.vmware.tag_categories:
+    tag_categories:
+      - name: "{{ vsphere_channel_category }}"
+        description: Release channel of a golden image template
+        cardinality: MULTIPLE
+        associable_types: [VirtualMachine]
+
+- name: Make sure the channel tags exist
+  vmware.vmware.tags:
+    tags: >-
+      {%- set out = [] -%}
+      {%- for c in vsphere_channels -%}
+      {%- set _ = out.append({'name': c, 'category_name': vsphere_channel_category}) -%}
+      {%- endfor -%}
+      {{ out }}
+
+- name: List the templates in the golden image folder
+  vmware.vmware.vm_info:
+    datacenter: "{{ vsphere_datacenter }}"
+    folder: "{{ vsphere_datacenter }}/vm/{{ vsphere_template_folder }}"
+    gather_tags: true
+  register: folder_vms
+
+- name: Keep this image's templates
+  ansible.builtin.set_fact:
+    image_templates: >-
+      {%- set out = [] -%}
+      {%- for vm in folder_vms.vms | sort(attribute='hw_name')
+            if vm.hw_is_template and vm.hw_name is match('^' ~ image ~ '-[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9]{4}$') -%}
+      {%- set _ = out.append({'name': vm.hw_name, 'moid': vm.moid,
+            'channels': vm.tags | default([]) | selectattr('category_name', 'equalto', vsphere_channel_category)
+                        | map(attribute='name') | list}) -%}
+      {%- endfor -%}
+      {{ out }}

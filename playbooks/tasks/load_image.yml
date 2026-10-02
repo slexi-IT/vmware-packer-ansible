@@ -1,0 +1,37 @@
+---
+# Find images/<os>/<image>/ for the requested image and load its image.yml.
+# Every playbook handles every image (Linux and Windows); all OS-specific settings, templates
+# and scripts live in the image's folder. Sets image_dir.
+- name: Check that an image was given
+  ansible.builtin.assert:
+    that:
+      - image is defined
+      - image is match('^[a-z0-9][a-z0-9-]*$')
+    fail_msg: "Pass the image to work on, e.g. -e image=rocky10-base (folders under images/<os>/)"
+
+# images/<os>/<image>/image.yml; the OS folder is not part of the image name
+- name: Find the image's folder
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/../images"
+    patterns: image.yml
+    recurse: true
+    depth: 3
+  register: image_files
+  delegate_to: localhost
+
+- name: Keep the one for this image
+  ansible.builtin.set_fact:
+    image_settings: "{{ image_files.files | map(attribute='path') | select('search', '/' ~ image ~ '/image.yml$') | list }}"
+
+- name: Stop unless exactly one image folder matches
+  ansible.builtin.assert:
+    that: image_settings | length == 1
+    fail_msg: "No (or more than one) images/<os>/{{ image }}/image.yml found"
+
+- name: Load the image settings
+  ansible.builtin.include_vars:
+    file: "{{ image_settings[0] }}"
+
+- name: Remember the image folder
+  ansible.builtin.set_fact:
+    image_dir: "{{ image_settings[0] | dirname }}"

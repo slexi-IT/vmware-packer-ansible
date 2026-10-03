@@ -1,2 +1,0 @@
-# xorriso: Packer builds the kickstart / autounattend CDs (cd_files) with it before uploading them
-xorriso [platform:rpm]

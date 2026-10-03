@@ -1,60 +1,44 @@
 # Execution environment
 
-The AWX execution environment for the image builds: the current `awx-ee` (ansible-core 2.18,
-Python 3.12, pinned by digest) plus Packer with its vsphere plugin, and xorriso, which Packer
-uses to build the kickstart / autounattend CDs.
-
-The collections that do the work after Packer's install come with the base image or
-`requirements.yml`:
-
-| Collection | Used for |
-|---|---|
-| `community.vmware` | The `vmware_tools` connection plugin: runs every configuration step inside the build VM through VMware Tools (no SSH, no WinRM) |
-| `ansible.windows` | Windows modules run through that connection (`win_updates`, `win_user`, `win_copy`, ...) |
-| `vmware.vmware` | Power state, VM info, template creation, tags, test deployments |
-| `community.general` | General filters and modules |
+The AWX execution environment for the image builds: Red Hat UBI 9 minimal (pinned by digest) with
+ansible-core 2.18 on Python 3.12, ansible-runner, Packer with its vsphere plugin, and xorriso, which
+Packer uses to build the kickstart / autounattend CDs. About 900 MB on disk.
 
 | File | Purpose |
 |---|---|
-| `execution-environment.yml` | ansible-builder definition: base image, Packer download with checksum check, plugin version |
-| `bindep.txt` | System packages installed into the image |
-| `requirements.yml` | Collections added on top of the base image |
+| `Dockerfile` | The whole image. Every version is an `ARG` at the top |
+| `build.sh` | Build with Docker and push to Harbor |
+
+The base image contains no Ansible content, so the `Dockerfile` installs every collection the
+playbooks use:
+
+| Collection | Used for |
+|---|---|
+| `community.vmware` | The `vmware_tools` connection plugin: runs every configuration step inside the build VM |
+| `ansible.windows` | Windows modules run through that connection (`win_updates`, `win_user`, `win_copy`, ...) |
+| `vmware.vmware` | Power state, VM info, template creation, tags, test deployments |
+| `community.general` | General filters and modules |
+| `awx.awx` | `awx/configure.yml`, run by the job template *vsphere/Apply AWX config* |
+
+A plain `Dockerfile` does not install what a collection needs by itself: the Python packages are
+listed by hand (`vcf-sdk` for the two VMware collections, `awxkit`, `pytz` and `python-dateutil`
+for `awx.awx`). A new collection goes in with another line in the `ansible-galaxy` step, plus
+whatever its `requirements.txt` names in the `pip install` step.
+
+xorriso is not in the UBI repositories: the `Dockerfile` adds CentOS Stream 9's AppStream,
+restricted to xorriso and its three libraries.
 
 ## Build
 
 ```sh
-cd ee
-python3 -m venv .venv && .venv/bin/pip install ansible-builder   # once
-.venv/bin/ansible-builder build --container-runtime podman -t <registry>/awx-ee-vmware-packer:<tag>
+sudo systemctl start docker                # the daemon is not enabled at boot
+docker login harbor.bitlex.li              # once: robot account with push on the project awxee
+ee/build.sh 2026.10.03-2                   # a new tag for every build
 ```
 
-Use a new tag for every build, so a running AWX never picks up a changed image under an old
-tag.
+`build.sh` runs `docker build` and `docker push` to Harbor (`harbor.bitlex.li`, private project
+`awxee`), image `awx-ee-vmware-packer`.
 
-## Build inside the cluster (single node, no registry)
-
-```sh
-kubectl apply -k ee/
-kubectl -n ee-build logs -f job/build-ee --all-containers
-```
-
-`kustomization.yaml` puts the three EE files into a ConfigMap and sets the image name (`IMAGE`).
-The Job runs `ansible-builder create`, then BuildKit with its containerd worker: it builds through
-the node's containerd (`/run/k0s/containerd.sock`) into the namespace `k8s.io`, where kubelet finds
-it. The build pod is privileged with the node's containerd socket and directories, so it is
-effectively root on the node, and the image exists only on the node that ran the Job.
-
-For a new version: change `IMAGE` in `kustomization.yaml` (and the image in `awx/config.yml`),
-`kubectl -n ee-build delete job build-ee`, apply again.
-
-## Load into the cluster
-
-In the lab there is no registry: the image goes into k0s's containerd as a file.
-
-```sh
-podman save --format docker-archive -o ee.tar <registry>/awx-ee-vmware-packer:<tag>
-sudo k0s ctr -n k8s.io images import ee.tar
-```
-
-Then set the tag in `awx/config.yml` (execution environment *AWX EE VMware Packer*), push,
-and run **Apply AWX config**.
+Then set the new tag in `awx/config.yml` (execution environment *AWX EE VMware Packer*), push, and
+run **Apply AWX config**. Use a new tag for every build, so a running AWX never picks up a changed
+image under an old tag.

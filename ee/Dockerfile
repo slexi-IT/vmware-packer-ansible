@@ -45,12 +45,14 @@ RUN microdnf install -y --nodocs --setopt=install_weak_deps=0 \
 
 # dumb-init: the container's first process, passes signals on and reaps finished child processes
 # awxkit, pytz, python-dateutil: needed by the awx.awx collection
+# python-tss-sdk: needed by the lookup community.general.tss (Delinea Secret Server)
 RUN python3 -m pip install --no-cache-dir \
       "ansible-core==${ANSIBLE_CORE_VERSION}" \
       "ansible-runner==${ANSIBLE_RUNNER_VERSION}" \
       dumb-init==1.2.5 \
       "vcf-sdk==${VCF_SDK_VERSION}" \
-      "awxkit==${AWX_VERSION}" pytz python-dateutil
+      "awxkit==${AWX_VERSION}" pytz python-dateutil \
+      python-tss-sdk
 
 RUN ansible-galaxy collection install \
       "community.vmware:${COMMUNITY_VMWARE_VERSION}" \

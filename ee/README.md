@@ -22,7 +22,7 @@ playbooks use:
 
 A plain `Dockerfile` does not install what a collection needs by itself: the Python packages are
 listed by hand (`vcf-sdk` for the two VMware collections, `awxkit`, `pytz` and `python-dateutil`
-for `awx.awx`). A new collection goes in with another line in the `ansible-galaxy` step, plus
+for `awx.awx`, `python-tss-sdk` for the lookup `community.general.tss`, Delinea Secret Server). A new collection goes in with another line in the `ansible-galaxy` step, plus
 whatever its `requirements.txt` names in the `pip install` step.
 
 xorriso is not in the UBI repositories: the `Dockerfile` adds CentOS Stream 9's AppStream,
@@ -33,7 +33,7 @@ restricted to xorriso and its three libraries.
 ```sh
 sudo systemctl start docker                # the daemon is not enabled at boot
 docker login harbor.bitlex.li              # once: robot account with push on the project awxee
-ee/build.sh 2026.10.03-2                   # a new tag for every build
+ee/build.sh 2026.10.03-3                   # a new tag for every build
 ```
 
 `build.sh` runs `docker build` and `docker push` to Harbor (`harbor.bitlex.li`, private project

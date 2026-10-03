@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the EE with Docker and push it to Harbor.
-# Run: ee/build.sh <tag>      e.g. ee/build.sh 2026.10.03-2
+# Run: ee/build.sh <tag>      e.g. ee/build.sh 2026.10.03-3
 # Needs a running Docker daemon and, once, `docker login harbor.bitlex.li` with a robot account
 # that may push to the project awxee.
 set -euo pipefail
